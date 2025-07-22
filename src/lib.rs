@@ -115,76 +115,83 @@ impl<'de> Iterator for Lexer<'de> {
     type Item = Result<Token<'de>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut chars = self.rest.chars();
-        let c = chars.next()?;
-        self.rest = chars.as_str();
-        self.byte += c.len_utf8();
+        loop {
+            let mut chars = self.rest.chars();
+            let c = chars.next()?;
+            let literal = &self.rest[..c.len_utf8()];
+            let cur = self.rest;
+            self.rest = chars.as_str();
+            self.byte += c.len_utf8();
 
-        enum Start {
-            String,
-            Ident,
-            Number,
-            IfEqualElse(TokenKind, TokenKind),
-        }
-
-        let process = |kind: TokenKind| {
-            Some(Ok(Token {
-                kind,
-                literal: &self.whole[self.byte - c.len_utf8()..self.byte],
-            }))
-        };
-
-        let started = match c {
-            '(' => return process(TokenKind::LeftParen),
-            ')' => return process(TokenKind::RightParen),
-            '{' => return process(TokenKind::LeftBrace),
-            '}' => return process(TokenKind::RightBrace),
-            ',' => return process(TokenKind::Comma),
-            '.' => return process(TokenKind::Dot),
-            '-' => return process(TokenKind::Minus),
-            '+' => return process(TokenKind::Plus),
-            ';' => return process(TokenKind::Semicolon),
-            '*' => return process(TokenKind::Star),
-            '/' => return process(TokenKind::Slash),
-            '!' => Start::IfEqualElse(TokenKind::BangEqual, TokenKind::Bang),
-            '=' => Start::IfEqualElse(TokenKind::EqualEqual, TokenKind::Equal),
-            '>' => Start::IfEqualElse(TokenKind::GreaterEqual, TokenKind::Greater),
-            '<' => Start::IfEqualElse(TokenKind::LessEqual, TokenKind::Less),
-            'a'..='z' | 'A'..='Z' | '_' => Start::Ident,
-            '0'..='9' => Start::Number,
-            '"' => Start::String,
-            c => {
-                return Some(Err(miette!(
-                    labels = vec![LabeledSpan::at(
-                        self.byte - c.len_utf8()..self.byte,
-                        "this character"
-                    )],
-                    "Unexpected token '{c}' in input"
-                )
-                .with_source_code(self.whole.to_string())));
+            enum Start {
+                String,
+                Ident,
+                Number,
+                IfEqualElse(TokenKind, TokenKind),
             }
-        };
 
-        match started {
-            Start::String => todo!(),
-            Start::Ident => todo!(),
-            Start::Number => todo!(),
-            Start::IfEqualElse(yes, no) => {
-                if self.rest.starts_with('=') {
-                    self.rest = &self.rest[1..];
-                    self.byte += 1;
-                    return Some(Ok(Token {
-                        kind: yes,
-                        literal: &self.whole[self.byte - 2..self.byte],
-                    }));
-                } else {
-                    return Some(Ok(Token {
-                        kind: no,
-                        literal: &self.whole[self.byte - 1..self.byte],
-                    }));
+            let process = |kind: TokenKind| Some(Ok(Token { kind, literal }));
+
+            let started = match c {
+                '(' => return process(TokenKind::LeftParen),
+                ')' => return process(TokenKind::RightParen),
+                '{' => return process(TokenKind::LeftBrace),
+                '}' => return process(TokenKind::RightBrace),
+                ',' => return process(TokenKind::Comma),
+                '.' => return process(TokenKind::Dot),
+                '-' => return process(TokenKind::Minus),
+                '+' => return process(TokenKind::Plus),
+                ';' => return process(TokenKind::Semicolon),
+                '*' => return process(TokenKind::Star),
+                '/' => return process(TokenKind::Slash),
+                '!' => Start::IfEqualElse(TokenKind::BangEqual, TokenKind::Bang),
+                '=' => Start::IfEqualElse(TokenKind::EqualEqual, TokenKind::Equal),
+                '>' => Start::IfEqualElse(TokenKind::GreaterEqual, TokenKind::Greater),
+                '<' => Start::IfEqualElse(TokenKind::LessEqual, TokenKind::Less),
+                'a'..='z' | 'A'..='Z' | '_' => Start::Ident,
+                '0'..='9' => Start::Number,
+                '"' => Start::String,
+                ' ' | '\r' | '\t' => continue, // Skip whitespace
+                c => {
+                    return Some(Err(miette!(
+                        labels = vec![LabeledSpan::at(
+                            self.byte - c.len_utf8()..self.byte,
+                            "this character"
+                        )],
+                        "Unexpected token '{c}' in input"
+                    )
+                    .with_source_code(self.whole.to_string())));
+                }
+            };
+
+            match started {
+                Start::String => todo!(),
+                Start::Ident => todo!(),
+                Start::Number => todo!(),
+                Start::IfEqualElse(yes, no) => {
+                    self.rest = self.rest.trim_start();
+                    // example: =    =
+                    //          cur.len() = 6
+                    //          c.len_utf8() = 1
+                    //          self.rest.len() = 1
+                    //          trimmed = cur.len() - self.rest.len() - c.len_utf8() = 6 - 1 - 1 = 4
+                    //          but c is 1 byte, so we need to add 1 to the trimmed length
+                    //          so we can get the span of the token
+                    let trimmed = cur.len() - self.rest.len() - 1;
+                    self.byte += trimmed;
+                    if self.rest.starts_with('=') {
+                        let span = &cur[..c.len_utf8() + trimmed + 1];
+                        self.rest = &self.rest[1..];
+                        self.byte += 1;
+                        return Some(Ok(Token {
+                            kind: yes,
+                            literal: span,
+                        }));
+                    } else {
+                        return Some(Ok(Token { kind: no, literal }));
+                    }
                 }
             }
         }
-        None
     }
 }
