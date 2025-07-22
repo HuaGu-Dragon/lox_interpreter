@@ -42,6 +42,16 @@ fn main() -> miette::Result<()> {
                             eprintln!("{e:?}");
 
                             std::process::exit(65);
+                        } else if let Some(string_termination_error) =
+                            e.downcast_ref::<lox_interpreter::StringTerminationError>()
+                        {
+                            eprintln!(
+                                "[line {}] Error: Unterminated string",
+                                string_termination_error.line()
+                            );
+                            eprintln!("{e:?}");
+
+                            std::process::exit(65);
                         }
                         return Err(e);
                     }

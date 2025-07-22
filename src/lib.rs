@@ -6,7 +6,7 @@ use miette::{Diagnostic, Error, LabeledSpan, NamedSource, SourceSpan, WrapErr, m
 use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
-#[error("Unexpected token '{token}' in input")]
+#[error("Unexpected token '{token}'")]
 #[diagnostic(help("remove or correct the token: `{token}`"))]
 pub struct SingleTokenError {
     #[source_code]
@@ -21,6 +21,23 @@ pub struct SingleTokenError {
 impl SingleTokenError {
     pub fn line(&self) -> usize {
         self.src.inner()[..=self.bad_bit.offset()].lines().count()
+    }
+}
+
+#[derive(Error, Debug, Diagnostic)]
+#[error("unterminated double quote string")]
+#[diagnostic(help("For more information about this error, try `rustc --explain E0765`."))]
+pub struct StringTerminationError {
+    #[source_code]
+    src: NamedSource<String>,
+
+    #[label("Syntax Error: Missing trailing `\"` symbol to terminate the string literal")]
+    bad_line: SourceSpan,
+}
+
+impl StringTerminationError {
+    pub fn line(&self) -> usize {
+        self.src.inner()[..=self.bad_line.offset()].lines().count()
     }
 }
 
@@ -93,7 +110,7 @@ impl Display for Token<'_> {
             TokenKind::Slash => write!(f, "SLASH {lit} null"),
             TokenKind::Bang => write!(f, "BANG {lit} null"),
             TokenKind::Equal => write!(f, "EQUAL {lit} null"),
-            TokenKind::String => todo!(),
+            TokenKind::String => write!(f, "STRING \"{lit}\" {lit}"),
             TokenKind::Ident => write!(f, "IDENTIFIER {lit} null"),
             TokenKind::Number(n) => write!(f, "NUMBER {lit} {n}"),
             TokenKind::And => write!(f, "AND {lit} null"),
@@ -189,7 +206,27 @@ impl<'de> Iterator for Lexer<'de> {
             };
 
             match started {
-                Start::String => todo!(),
+                Start::String => {
+                    // different from Jon Gjengset, I just play a cheat. awa
+                    if let Some(end) = self.rest.find('"') {
+                        let literal = &self.rest[..end];
+                        self.byte += end + 1;
+                        self.rest = &self.rest[end + 1..];
+                        return Some(Ok(Token {
+                            kind: TokenKind::String,
+                            literal,
+                        }));
+                    } else {
+                        return Some(Err(StringTerminationError {
+                            src: NamedSource::new(
+                                self.filename.unwrap_or_else(|| "<input>"),
+                                self.whole.to_string(),
+                            ),
+                            bad_line: SourceSpan::from(self.byte - c.len_utf8()..self.whole.len()),
+                        }
+                        .into()));
+                    }
+                }
                 Start::Slash => {
                     if self.rest.starts_with('/') {
                         let new_line = self.rest.find('\n').unwrap_or_else(|| self.rest.len());
