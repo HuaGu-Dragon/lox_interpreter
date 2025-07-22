@@ -151,7 +151,7 @@ impl<'de> Iterator for Lexer<'de> {
                 'a'..='z' | 'A'..='Z' | '_' => Start::Ident,
                 '0'..='9' => Start::Number,
                 '"' => Start::String,
-                ' ' | '\r' | '\t' => continue, // Skip whitespace
+                ' ' | '\r' | '\t' | '\n' => continue, // Skip whitespace
                 c => {
                     return Some(Err(miette!(
                         labels = vec![LabeledSpan::at(
@@ -167,7 +167,43 @@ impl<'de> Iterator for Lexer<'de> {
             match started {
                 Start::String => todo!(),
                 Start::Ident => todo!(),
-                Start::Number => todo!(),
+                Start::Number => {
+                    let first_non_digit = cur
+                        .find(|c| !matches!(c, '0'..='9' | '.'))
+                        .unwrap_or_else(|| cur.len());
+
+                    let mut literal = &cur[..first_non_digit];
+
+                    let mut dotted = literal.splitn(3, '.');
+                    if let (Some(one), Some(two), Some(_)) =
+                        (dotted.next(), dotted.next(), dotted.next())
+                    {
+                        literal = &literal[..one.len() + two.len() + 1];
+                    }
+
+                    let extra_bytes = literal.len() - c.len_utf8();
+                    self.byte += extra_bytes;
+                    self.rest = &self.rest[extra_bytes..];
+
+                    let n = match literal.parse() {
+                        Ok(n) => n,
+                        Err(e) => {
+                            return Some(Err(miette!(
+                                labels = vec![LabeledSpan::at(
+                                    self.byte - literal.len()..self.byte,
+                                    "this numeric literal"
+                                )],
+                                "{e}"
+                            )
+                            .with_source_code(self.whole.to_string())));
+                        }
+                    };
+
+                    return Some(Ok(Token {
+                        kind: TokenKind::Number(n),
+                        literal,
+                    }));
+                }
                 Start::IfEqualElse(yes, no) => {
                     self.rest = self.rest.trim_start();
                     // example: =    =
