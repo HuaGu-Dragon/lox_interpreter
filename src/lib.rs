@@ -2,7 +2,27 @@
 
 use std::fmt::Display;
 
-use miette::{Error, LabeledSpan, WrapErr, miette};
+use miette::{Diagnostic, Error, LabeledSpan, NamedSource, SourceSpan, WrapErr, miette};
+use thiserror::Error;
+
+#[derive(Error, Debug, Diagnostic)]
+#[error("Unexpected token '{token}' in input")]
+#[diagnostic(help("remove or correct the token: `{token}`"))]
+pub struct SingleTokenError {
+    #[source_code]
+    src: NamedSource<String>,
+
+    #[label("this character")]
+    bad_bit: SourceSpan,
+
+    pub token: char,
+}
+
+impl SingleTokenError {
+    pub fn line(&self) -> usize {
+        self.src.inner()[..=self.bad_bit.offset()].lines().count()
+    }
+}
 
 pub struct Token<'de> {
     kind: TokenKind,
@@ -96,14 +116,16 @@ impl Display for Token<'_> {
 }
 
 pub struct Lexer<'de> {
+    filename: Option<&'de str>,
     whole: &'de str,
     rest: &'de str,
     byte: usize,
 }
 
 impl<'de> Lexer<'de> {
-    pub fn new(input: &'de str) -> Self {
+    pub fn new(filename: Option<&'de str>, input: &'de str) -> Self {
         Lexer {
+            filename,
             whole: input,
             rest: input,
             byte: 0,
@@ -153,14 +175,15 @@ impl<'de> Iterator for Lexer<'de> {
                 '"' => Start::String,
                 ' ' | '\r' | '\t' | '\n' => continue, // Skip whitespace
                 c => {
-                    return Some(Err(miette!(
-                        labels = vec![LabeledSpan::at(
-                            self.byte - c.len_utf8()..self.byte,
-                            "this character"
-                        )],
-                        "Unexpected token '{c}' in input"
-                    )
-                    .with_source_code(self.whole.to_string())));
+                    return Some(Err(SingleTokenError {
+                        src: NamedSource::new(
+                            self.filename.unwrap_or_else(|| "<input>"),
+                            self.whole.to_string(),
+                        ),
+                        bad_bit: SourceSpan::from(self.byte - c.len_utf8()..self.byte),
+                        token: c,
+                    }
+                    .into()));
                 }
             };
 
@@ -224,11 +247,14 @@ impl<'de> Iterator for Lexer<'de> {
                         Ok(n) => n,
                         Err(e) => {
                             return Some(Err(miette!(
+                                code = "ParseFloatError",
+                                url =
+                                    "https://doc.rust-lang.org/std/num/struct.ParseFloatError.html",
                                 labels = vec![LabeledSpan::at(
                                     self.byte - literal.len()..self.byte,
                                     "this numeric literal"
                                 )],
-                                "{e}"
+                                "{e}",
                             )
                             .with_source_code(self.whole.to_string())));
                         }

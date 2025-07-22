@@ -17,6 +17,7 @@ struct Args {
 enum Commands {
     Tokenize { filename: PathBuf },
 }
+// 3.06.08
 fn main() -> miette::Result<()> {
     let args = Args::parse();
 
@@ -26,8 +27,25 @@ fn main() -> miette::Result<()> {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("reading `{}` failed", filename.display()))?;
 
-            for token in Lexer::new(&file_contents) {
-                let token = token?;
+            for token in Lexer::new(filename.to_str(), &file_contents) {
+                let token = match token {
+                    Ok(token) => token,
+                    Err(e) => {
+                        if let Some(single_token_error) =
+                            e.downcast_ref::<lox_interpreter::SingleTokenError>()
+                        {
+                            eprintln!(
+                                "[line {}] Error: Unexpected character: {}",
+                                single_token_error.line(),
+                                single_token_error.token
+                            );
+                            eprintln!("{e:?}");
+
+                            std::process::exit(65);
+                        }
+                        return Err(e);
+                    }
+                };
                 println!("// expect: {token}");
             }
             println!("// expect: EOF  null");
