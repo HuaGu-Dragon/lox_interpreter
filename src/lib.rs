@@ -166,7 +166,38 @@ impl<'de> Iterator for Lexer<'de> {
 
             match started {
                 Start::String => todo!(),
-                Start::Ident => todo!(),
+                Start::Ident => {
+                    let first_non_ident = cur
+                        .find(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
+                        .unwrap_or_else(|| cur.len());
+
+                    let literal = &cur[..first_non_ident];
+
+                    let extra_bytes = literal.len() - c.len_utf8();
+                    self.byte += extra_bytes;
+                    self.rest = &self.rest[extra_bytes..];
+
+                    let kind = match literal {
+                        "and" => TokenKind::And,
+                        "class" => TokenKind::Class,
+                        "else" => TokenKind::Else,
+                        "false" => TokenKind::False,
+                        "for" => TokenKind::For,
+                        "fun" => TokenKind::Fun,
+                        "if" => TokenKind::If,
+                        "nil" => TokenKind::Nil,
+                        "or" => TokenKind::Or,
+                        "return" => TokenKind::Return,
+                        "super" => TokenKind::Super,
+                        "this" => TokenKind::This,
+                        "true" => TokenKind::True,
+                        "var" => TokenKind::Var,
+                        "while" => TokenKind::While,
+                        _ => TokenKind::Ident,
+                    };
+
+                    return Some(Ok(Token { kind, literal }));
+                }
                 Start::Number => {
                     let first_non_digit = cur
                         .find(|c| !matches!(c, '0'..='9' | '.'))
