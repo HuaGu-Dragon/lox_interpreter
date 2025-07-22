@@ -206,11 +206,15 @@ impl<'de> Iterator for Lexer<'de> {
                     let mut literal = &cur[..first_non_digit];
 
                     let mut dotted = literal.splitn(3, '.');
-                    if let (Some(one), Some(two), Some(_)) =
-                        (dotted.next(), dotted.next(), dotted.next())
-                    {
-                        literal = &literal[..one.len() + two.len() + 1];
-                    }
+                    match (dotted.next(), dotted.next(), dotted.next()) {
+                        (Some(one), Some(two), Some(_)) => {
+                            literal = &literal[..one.len() + two.len() + 1]
+                        }
+                        (Some(one), Some(two), None) if two.is_empty() => {
+                            literal = &literal[..one.len()]
+                        }
+                        _ => {}
+                    };
 
                     let extra_bytes = literal.len() - c.len_utf8();
                     self.byte += extra_bytes;
