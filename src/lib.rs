@@ -85,6 +85,7 @@ pub enum TokenKind {
     True,
     Var,
     While,
+    Print,
 }
 
 impl Display for Token<'_> {
@@ -112,7 +113,13 @@ impl Display for Token<'_> {
             TokenKind::Equal => write!(f, "EQUAL {lit} null"),
             TokenKind::String => write!(f, "STRING \"{lit}\" {lit}"),
             TokenKind::Ident => write!(f, "IDENTIFIER {lit} null"),
-            TokenKind::Number(n) => write!(f, "NUMBER {lit} {n}"),
+            TokenKind::Number(n) => {
+                if n == n.trunc() {
+                    write!(f, "NUMBER {lit} {n}.0")
+                } else {
+                    write!(f, "NUMBER {lit} {n}")
+                }
+            }
             TokenKind::And => write!(f, "AND {lit} null"),
             TokenKind::Class => write!(f, "CLASS {lit} null"),
             TokenKind::Else => write!(f, "ELSE {lit} null"),
@@ -128,6 +135,7 @@ impl Display for Token<'_> {
             TokenKind::True => write!(f, "TRUE {lit} null"),
             TokenKind::Var => write!(f, "VAR {lit} null"),
             TokenKind::While => write!(f, "WHILE {lit} null"),
+            TokenKind::Print => write!(f, "PRINT {lit} null"),
         }
     }
 }
@@ -264,6 +272,7 @@ impl<'de> Iterator for Lexer<'de> {
                         "true" => TokenKind::True,
                         "var" => TokenKind::Var,
                         "while" => TokenKind::While,
+                        "print" => TokenKind::Print,
                         _ => TokenKind::Ident,
                     };
 
