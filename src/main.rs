@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap::Subcommand;
 use lox_interpreter::Lexer;
+use lox_interpreter::lex::SingleTokenError;
+use lox_interpreter::lex::StringTerminationError;
 use miette::IntoDiagnostic;
 use miette::WrapErr;
 
@@ -17,7 +19,7 @@ struct Args {
 enum Commands {
     Tokenize { filename: PathBuf },
 }
-// 3.06.08
+
 fn main() -> miette::Result<()> {
     let args = Args::parse();
 
@@ -31,9 +33,7 @@ fn main() -> miette::Result<()> {
                 let token = match token {
                     Ok(token) => token,
                     Err(e) => {
-                        if let Some(single_token_error) =
-                            e.downcast_ref::<lox_interpreter::SingleTokenError>()
-                        {
+                        if let Some(single_token_error) = e.downcast_ref::<SingleTokenError>() {
                             eprintln!(
                                 "[line {}] Error: Unexpected character: {}",
                                 single_token_error.line(),
@@ -43,7 +43,7 @@ fn main() -> miette::Result<()> {
 
                             std::process::exit(65);
                         } else if let Some(string_termination_error) =
-                            e.downcast_ref::<lox_interpreter::StringTerminationError>()
+                            e.downcast_ref::<StringTerminationError>()
                         {
                             eprintln!(
                                 "[line {}] Error: Unterminated string",
