@@ -39,9 +39,13 @@ impl StringTerminationError {
     }
 }
 
+#[derive(Error, Debug, Diagnostic)]
+#[error("Unexpected end of file")]
+pub struct Eof;
+
 pub struct Token<'de> {
-    kind: TokenKind,
-    literal: &'de str,
+    pub kind: TokenKind,
+    pub literal: &'de str,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,6 +156,25 @@ impl<'de> Lexer<'de> {
             whole: input,
             rest: input,
             byte: 0,
+        }
+    }
+
+    pub fn expect(&mut self, expected: TokenKind, unexpected: &str) -> Result<(), Error> {
+        match self.next() {
+            Some(Ok(token)) if token.kind == expected => Ok(()),
+            Some(Ok(token)) => Err(miette::miette!(
+                code = "ParseFloatError",
+                url = "https://doc.rust-lang.org/std/num/struct.ParseFloatError.html",
+                help = "Expected {expected:?}",
+                labels = vec![LabeledSpan::at(
+                    self.byte - token.literal.len()..self.byte,
+                    "here",
+                )],
+                "{token}",
+            )
+            .with_source_code(self.whole.to_string())),
+            Some(Err(e)) => Err(e),
+            None => Err(Eof.into()),
         }
     }
 }
