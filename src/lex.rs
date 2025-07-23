@@ -147,6 +147,7 @@ pub struct Lexer<'de> {
     whole: &'de str,
     rest: &'de str,
     byte: usize,
+    peeked: Option<Result<Token<'de>, Error>>,
 }
 
 impl<'de> Lexer<'de> {
@@ -156,26 +157,41 @@ impl<'de> Lexer<'de> {
             whole: input,
             rest: input,
             byte: 0,
+            peeked: None,
         }
     }
 
-    pub fn expect(&mut self, expected: TokenKind, unexpected: &str) -> Result<(), Error> {
+    pub fn expect(&mut self, expected: TokenKind, error: &str) -> Result<Token<'de>, Error> {
+        self.expect_where(|token| token.kind == expected, error)
+    }
+
+    pub fn expect_where(
+        &mut self,
+        check: impl FnOnce(&Token<'de>) -> bool,
+        error: &str,
+    ) -> Result<Token<'de>, Error> {
         match self.next() {
-            Some(Ok(token)) if token.kind == expected => Ok(()),
+            Some(Ok(token)) if check(&token) => Ok(token),
             Some(Ok(token)) => Err(miette::miette!(
-                code = "ParseFloatError",
-                url = "https://doc.rust-lang.org/std/num/struct.ParseFloatError.html",
                 help = "Expected {expected:?}",
                 labels = vec![LabeledSpan::at(
                     self.byte - token.literal.len()..self.byte,
                     "here",
                 )],
-                "{token}",
+                "{error}",
             )
             .with_source_code(self.whole.to_string())),
             Some(Err(e)) => Err(e),
             None => Err(Eof.into()),
         }
+    }
+
+    pub fn peek(&mut self) -> Option<&Result<Token<'de>, Error>> {
+        if self.peeked.is_some() {
+            return self.peeked.as_ref();
+        }
+        self.peeked = self.next();
+        self.peeked.as_ref()
     }
 }
 
