@@ -147,7 +147,7 @@ pub struct Lexer<'de> {
     filename: Option<&'de str>,
     whole: &'de str,
     rest: &'de str,
-    byte: usize,
+    pub byte: usize,
     peeked: Option<Result<Token<'de>, Error>>,
 }
 

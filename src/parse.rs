@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use miette::{Context, Error};
+use miette::{Context, Error, LabeledSpan};
 
 use crate::{
     Lexer,
@@ -56,6 +56,7 @@ pub enum Op {
     Field,
     Var,
     While,
+    Call,
 }
 
 impl<'de> Parser<'de> {
@@ -92,6 +93,30 @@ impl<'de> Parser<'de> {
 
         let lhs = match lhs {
             Token {
+                kind: TokenKind::Super,
+                ..
+            } => TokenTree::Atom(Atom::Super),
+            Token {
+                kind: TokenKind::This,
+                ..
+            } => TokenTree::Atom(Atom::This),
+            Token {
+                kind: TokenKind::Ident,
+                literal,
+            } => TokenTree::Atom(Atom::Ident(literal)),
+            Token {
+                kind: TokenKind::LeftParen,
+                ..
+            } => {
+                let lhs = self
+                    .parse_expression_within(0)
+                    .wrap_err("in bracketed expression")?;
+                self.lexer
+                    .expect(TokenKind::RightParen, "Expected ')'")
+                    .wrap_err("after bracketed expression")?;
+                lhs
+            }
+            Token {
                 kind: TokenKind::Return | TokenKind::Print,
                 ..
             } => {
@@ -104,7 +129,7 @@ impl<'de> Parser<'de> {
                 let rhs = self
                     .parse_expression_within(r_bp)
                     .wrap_err("in right-hand side")?;
-                TokenTree::Cons(op, vec![rhs])
+                return Ok(TokenTree::Cons(op, vec![rhs]));
             }
 
             Token {
@@ -144,7 +169,7 @@ impl<'de> Parser<'de> {
 
                 let block = self.parse_block().wrap_err("in body of for loop")?;
 
-                TokenTree::Cons(Op::For, vec![init, cond, inc, block])
+                return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
             }
 
             Token {
@@ -165,7 +190,7 @@ impl<'de> Parser<'de> {
 
                 let block = self.parse_block().wrap_err("in body of while loop")?;
 
-                TokenTree::Cons(Op::While, vec![cond, block])
+                return Ok(TokenTree::Cons(Op::While, vec![cond, block]));
             }
 
             Token {
@@ -180,7 +205,7 @@ impl<'de> Parser<'de> {
 
                 let block = self.parse_block().wrap_err("in class definition")?;
 
-                TokenTree::Cons(Op::Class, vec![ident, block])
+                return Ok(TokenTree::Cons(Op::Class, vec![ident, block]));
             }
             Token {
                 kind: TokenKind::Var,
@@ -201,7 +226,7 @@ impl<'de> Parser<'de> {
                     .parse_expression_within(0)
                     .wrap_err("in variable assignment expression")?;
 
-                TokenTree::Cons(Op::Var, vec![ident, second])
+                return Ok(TokenTree::Cons(Op::Var, vec![ident, second]));
             }
 
             Token {
@@ -258,7 +283,7 @@ impl<'de> Parser<'de> {
                     .parse_block()
                     .wrap_err_with(|| format!("in body of function {name}"))?;
 
-                TokenTree::Fun(ident, params, body)
+                return Ok(TokenTree::Fun(ident, params, body));
             }
 
             Token {
@@ -292,20 +317,51 @@ impl<'de> Parser<'de> {
                     otherwise = Some(else_block);
                 }
 
-                TokenTree::If(cond, block, otherwise)
+                return Ok(TokenTree::If(cond, block, otherwise));
             }
-            _ => todo!(),
+            token => {
+                return Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(
+                            self.lexer.byte - token.literal.len()..self.lexer.byte,
+                            "here",
+                        )
+                    ],
+                    "expected a statement"
+                }
+                .with_source_code(self.whole));
+            }
         };
 
         loop {
             let op = self.lexer.peek();
             if op.map_or(false, |op| op.is_err()) {
-                return Err(miette::miette!("Error while lexing"));
+                return Err(self
+                    .lexer
+                    .next()
+                    .expect("Error while lexing")
+                    .expect_err("peeked token")
+                    .wrap_err("in place of operator"));
             }
             let op = match op.map(|res| res.as_ref().expect("peeked token")) {
                 None => break,
-                Some(_) => todo!(),
+                Some(Token {
+                    kind: TokenKind::LeftParen,
+                    ..
+                }) => Op::Call,
+                Some(Token {
+                    kind: TokenKind::Dot,
+                    ..
+                }) => Op::Field,
+                _ => todo!(),
             };
+
+            if let Some((l_bp, ())) = postfix_binding_power(op) {
+                if l_bp < min_bp {
+                    break;
+                }
+                self.lexer.next();
+            }
         }
         todo!()
     }
@@ -407,9 +463,27 @@ impl<'de> Parser<'de> {
     }
 }
 
-fn prefix_binding_power(op: Op) -> ((), u8) {
-    match op {
+fn prefix_binding_power(op: Op) -> Option<((), u8)> {
+    let res = match op {
         Op::Minus | Op::Bang => ((), 7),
         _ => todo!(),
-    }
+    };
+    Some(res)
+}
+
+fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
+    let res = match op {
+        Op::And | Op::Minus => (5, 6),
+        Op::Field => (11, 10),
+        _ => todo!(),
+    };
+    Some(res)
+}
+
+fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
+    let res = match op {
+        Op::Call => (8, ()),
+        _ => todo!(),
+    };
+    Some(res)
 }
