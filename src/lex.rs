@@ -43,12 +43,13 @@ impl StringTerminationError {
 #[error("Unexpected end of file")]
 pub struct Eof;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token<'de> {
     pub kind: TokenKind,
     pub literal: &'de str,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenKind {
     LeftParen,
     RightParen,
