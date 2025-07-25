@@ -1,2 +1,15 @@
-(a.foo)(true, 42, "hello banana" + " also")
-(a + b)
+if ((a.foo)(true, 42, "hello banana" + " also")) {
+    print a + b * c / d
+} else {
+    if (a >= b) {
+        var c = 1 + 2
+    } else {
+        if (true) {
+            fun test_function(a, b) {
+                print "good"
+            }
+        } else {
+            print "else"
+        }
+    }
+}

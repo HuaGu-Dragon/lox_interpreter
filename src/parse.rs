@@ -127,6 +127,25 @@ impl<'de> Parser<'de> {
     }
 
     pub fn parse_statement_within(&mut self, min_bp: u8) -> Result<TokenTree<'de>, Error> {
+        if matches!(
+            self.lexer.peek(),
+            Some(Ok(Token {
+                kind: TokenKind::Class
+                    | TokenKind::If
+                    | TokenKind::Fun
+                    | TokenKind::For
+                    | TokenKind::Var
+                    | TokenKind::While
+                    | TokenKind::Print
+                    | TokenKind::Return,
+                ..
+            }))
+        ) {
+        } else {
+            return self
+                .parse_expression_within(0)
+                .wrap_err("parse expression statement");
+        };
         let lhs = match self.lexer.next() {
             Some(Ok(token)) => token,
             None => {
@@ -389,6 +408,7 @@ impl<'de> Parser<'de> {
         };
 
         loop {
+            let bytes = self.lexer.byte;
             let op = self.lexer.peek();
             if op.map_or(false, |op| op.is_err()) {
                 return Err(self
@@ -408,7 +428,24 @@ impl<'de> Parser<'de> {
                     kind: TokenKind::Dot,
                     ..
                 }) => Op::Field,
-                _ => todo!(),
+                Some(Token {
+                    kind: TokenKind::Semicolon,
+                    ..
+                }) => break,
+
+                Some(token) => {
+                    return Err(miette::miette! {
+                        help = "expected an operator",
+                        labels = vec![
+                            LabeledSpan::at(
+                                bytes..bytes + token.literal.len(),
+                                "here",
+                            )
+                        ],
+                        "unexpected token in expression: {token:?}",
+                    }
+                    .with_source_code(self.whole.to_string()));
+                }
             };
 
             if let Some((l_bp, ())) = postfix_binding_power(op) {
@@ -605,15 +642,16 @@ impl<'de> Parser<'de> {
                     ..
                 }) => Op::Star,
                 Some(Token {
-                    kind: TokenKind::RightParen,
-                    ..
-                }) => break,
-                Some(Token {
-                    kind: TokenKind::Comma,
+                    kind:
+                        TokenKind::RightParen
+                        | TokenKind::RightBrace
+                        | TokenKind::Semicolon
+                        | TokenKind::Comma,
                     ..
                 }) => break,
                 Some(token) => {
                     return Err(miette::miette! {
+                        help = "expected an operator",
                         labels = vec![
                             LabeledSpan::at(
                                 bytes..bytes + token.literal.len(),
@@ -754,7 +792,7 @@ impl Display for TokenTree<'_> {
 
 fn prefix_binding_power(op: Op) -> ((), u8) {
     match op {
-        Op::Minus | Op::Bang => ((), 7),
+        Op::Plus | Op::Minus | Op::Bang => ((), 9),
         Op::Print | Op::Return => ((), 0),
         _ => todo!(),
     }
@@ -762,6 +800,13 @@ fn prefix_binding_power(op: Op) -> ((), u8) {
 
 fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
     let res = match op {
+        Op::And | Op::Or => (1, 2),
+        Op::EqualEqual
+        | Op::BangEqual
+        | Op::Less
+        | Op::LessEqual
+        | Op::Greater
+        | Op::GreaterEqual => (3, 4),
         Op::Plus | Op::Minus => (5, 6),
         Op::Star | Op::Slash => (7, 8),
         Op::Field => (11, 10),
@@ -772,7 +817,7 @@ fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
 
 fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
     let res = match op {
-        Op::Call => (8, ()),
+        Op::Call => (9, ()),
         _ => return None,
     };
     Some(res)
