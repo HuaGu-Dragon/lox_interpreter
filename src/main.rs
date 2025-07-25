@@ -18,6 +18,7 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Tokenize { filename: PathBuf },
+    Parse { filename: PathBuf },
 }
 
 fn main() -> miette::Result<()> {
@@ -59,6 +60,14 @@ fn main() -> miette::Result<()> {
                 println!("// expect: {token}");
             }
             println!("// expect: EOF  null");
+        }
+        Commands::Parse { filename } => {
+            let file_contents = fs::read_to_string(&filename)
+                .into_diagnostic()
+                .wrap_err_with(|| format!("reading `{}` failed", filename.display()))?;
+
+            let parser = lox_interpreter::Parser::new(filename.to_str(), &file_contents);
+            eprintln!("{}", parser.parse().wrap_err("Failed to parse file")?);
         }
     }
     Ok(())

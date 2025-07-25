@@ -96,10 +96,6 @@ impl<'de> Parser<'de> {
     }
 
     pub fn parse_fun_call(&mut self) -> Result<Vec<TokenTree<'de>>, Error> {
-        self.lexer
-            .expect(TokenKind::LeftParen, "Expected '(' after function name")
-            .wrap_err("in argument list of function call")?;
-
         let mut arguments = Vec::new();
 
         if matches!(
@@ -117,13 +113,10 @@ impl<'de> Parser<'de> {
                 })?;
                 arguments.push(argument);
 
-                let token = self
-                    .lexer
-                    .expect_where(
-                        |token| matches!(token.kind, TokenKind::Comma | TokenKind::RightParen),
-                        "Expected ',' or ')' after function argument",
-                    )
-                    .wrap_err("in argument list of function call")?;
+                let token = self.lexer.expect_where(
+                    |token| matches!(token.kind, TokenKind::Comma | TokenKind::RightParen),
+                    "Expected ',' or ')' after function argument",
+                )?;
 
                 if token.kind == TokenKind::RightParen {
                     break;
@@ -528,10 +521,22 @@ impl<'de> Parser<'de> {
                 TokenTree::Cons(op, vec![rhs])
             }
 
-            _ => todo!(),
+            token => {
+                return Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(
+                            self.lexer.byte - lhs.literal.len()..self.lexer.byte,
+                            "here",
+                        )
+                    ],
+                    "unexpected token in expression: {token:?}",
+                }
+                .with_source_code(self.whole.to_string()));
+            }
         };
 
         loop {
+            let bytes = self.lexer.byte;
             let op = self.lexer.peek();
             if op.map_or(false, |op| op.is_err()) {
                 return Err(self
@@ -599,7 +604,26 @@ impl<'de> Parser<'de> {
                     kind: TokenKind::Star,
                     ..
                 }) => Op::Star,
-                _ => todo!(),
+                Some(Token {
+                    kind: TokenKind::RightParen,
+                    ..
+                }) => break,
+                Some(Token {
+                    kind: TokenKind::Comma,
+                    ..
+                }) => break,
+                Some(token) => {
+                    return Err(miette::miette! {
+                        labels = vec![
+                            LabeledSpan::at(
+                                bytes..bytes + token.literal.len(),
+                                "here",
+                            )
+                        ],
+                        "unexpected token in expression: {token:?}",
+                    }
+                    .with_source_code(self.whole.to_string()));
+                }
             };
 
             if let Some((l_bp, ())) = postfix_binding_power(op) {
@@ -731,6 +755,7 @@ impl Display for TokenTree<'_> {
 fn prefix_binding_power(op: Op) -> ((), u8) {
     match op {
         Op::Minus | Op::Bang => ((), 7),
+        Op::Print | Op::Return => ((), 0),
         _ => todo!(),
     }
 }

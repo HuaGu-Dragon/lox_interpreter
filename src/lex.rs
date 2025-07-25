@@ -200,6 +200,9 @@ impl<'de> Iterator for Lexer<'de> {
     type Item = Result<Token<'de>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(peeked) = self.peeked.take() {
+            return Some(peeked);
+        }
         loop {
             let mut chars = self.rest.chars();
             let c = chars.next()?;
