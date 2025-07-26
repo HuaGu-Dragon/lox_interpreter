@@ -2,7 +2,7 @@ if (a.foo(true, 42, "hello banana" + " also")) {
     print a + b * c / d
 } else {
     if (a >= b) {
-        c = 1 + 2;
+        var c = 1 + 2;
     } else {
         if (true) {
             fun test_function(a, b) {

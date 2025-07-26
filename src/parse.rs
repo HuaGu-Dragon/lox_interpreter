@@ -216,9 +216,9 @@ impl<'de> Parser<'de> {
                     .parse_statement_within(0)
                     .wrap_err_with(|| format!("in init condition of for loop"))?;
 
-                self.lexer
-                    .expect(TokenKind::Semicolon, "Expected ';' after for loop init")
-                    .wrap_err("in for loop condition")?;
+                // self.lexer
+                //     .expect(TokenKind::Semicolon, "Expected ';' after for loop init")
+                //     .wrap_err("in for loop condition")?;
 
                 let cond = self
                     .parse_expression_within(0)
@@ -298,7 +298,16 @@ impl<'de> Parser<'de> {
                     .parse_expression_within(0)
                     .wrap_err("in variable assignment expression")?;
 
-                return Ok(TokenTree::Cons(Op::Var, vec![ident, second]));
+                let res = Ok(TokenTree::Cons(Op::Var, vec![ident, second]));
+
+                self.lexer
+                    .expect(
+                        TokenKind::Semicolon,
+                        "Expected ';' after variable assignment",
+                    )
+                    .wrap_err("after variable assignment")?;
+
+                return res;
             }
 
             Token {
