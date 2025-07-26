@@ -1,15 +1,21 @@
-if ((a.foo)(true, 42, "hello banana" + " also")) {
+if (a.foo(true, 42, "hello banana" + " also")) {
     print a + b * c / d
 } else {
     if (a >= b) {
-        var c = 1 + 2
+        c = 1 + 2;
     } else {
         if (true) {
             fun test_function(a, b) {
                 print "good"
             }
         } else {
-            print "else"
+            if (bar.x) {
+                for (var i = 0; i < 100000; i = i + 1) {
+                    sum = sum + i;
+                }
+            } else {
+                print "else"
+            }
         }
     }
 }

@@ -142,9 +142,12 @@ impl<'de> Parser<'de> {
             }))
         ) {
         } else {
-            return self
+            let expr = self
                 .parse_expression_within(0)
                 .wrap_err("parse expression statement");
+            self.lexer
+                .expect(TokenKind::Semicolon, "Expected ';' after expression")?;
+            return expr;
         };
         let lhs = match self.lexer.next() {
             Some(Ok(token)) => token,
@@ -205,8 +208,12 @@ impl<'de> Parser<'de> {
                     .expect(TokenKind::LeftParen, "Expected '(' after 'for'")
                     .wrap_err("in for loop condition")?;
 
+                // let init = self
+                //     .parse_expression_within(0)
+                //     .wrap_err_with(|| format!("in init condition of for loop"))?;
+
                 let init = self
-                    .parse_expression_within(0)
+                    .parse_statement_within(0)
                     .wrap_err_with(|| format!("in init condition of for loop"))?;
 
                 self.lexer
@@ -606,6 +613,10 @@ impl<'de> Parser<'de> {
                     ..
                 }) => Op::EqualEqual,
                 Some(Token {
+                    kind: TokenKind::Equal,
+                    ..
+                }) => Op::Equal,
+                Some(Token {
                     kind: TokenKind::Greater,
                     ..
                 }) => Op::Greater,
@@ -800,6 +811,7 @@ fn prefix_binding_power(op: Op) -> ((), u8) {
 
 fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
     let res = match op {
+        Op::Equal => (0, 1),
         Op::And | Op::Or => (1, 2),
         Op::EqualEqual
         | Op::BangEqual
