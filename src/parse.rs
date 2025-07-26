@@ -775,7 +775,7 @@ impl Display for TokenTree<'_> {
             TokenTree::Fun { name, params, body } => {
                 write!(f, "(def {name}")?;
                 for para in params {
-                    write!(f, "{para}")?;
+                    write!(f, " {para}")?;
                 }
                 write!(f, " {body})")
             }
