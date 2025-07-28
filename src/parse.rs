@@ -127,7 +127,7 @@ impl<'de> Parser<'de> {
     }
 
     pub fn parse_statement_within(&mut self, min_bp: u8) -> Result<TokenTree<'de>, Error> {
-        if matches!(
+        let statement = if matches!(
             self.lexer.peek(),
             Some(Ok(Token {
                 kind: TokenKind::Class
@@ -137,366 +137,274 @@ impl<'de> Parser<'de> {
                     | TokenKind::Var
                     | TokenKind::While
                     | TokenKind::Print
-                    | TokenKind::Return,
+                    | TokenKind::Return
+                    | TokenKind::Semicolon,
                 ..
             }))
         ) {
-        } else {
-            let expr = self
-                .parse_expression_within(0)
-                .wrap_err("parse expression statement");
-            self.lexer
-                .expect(TokenKind::Semicolon, "Expected ';' after expression")?;
-            return expr;
-        };
-        let lhs = match self.lexer.next() {
-            Some(Ok(token)) => token,
-            None => {
-                return Ok(TokenTree::Atom(Atom::Nil));
-            }
-            Some(Err(e)) => {
-                return Err(e).wrap_err("Error while parsing left-hand side of expression");
-            }
-        };
-
-        let mut lhs = match lhs {
-            Token {
-                kind: TokenKind::Super,
-                ..
-            } => TokenTree::Atom(Atom::Super),
-            Token {
-                kind: TokenKind::This,
-                ..
-            } => TokenTree::Atom(Atom::This),
-            Token {
-                kind: TokenKind::Ident,
-                literal,
-            } => TokenTree::Atom(Atom::Ident(literal)),
-            Token {
-                kind: TokenKind::LeftParen,
-                ..
-            } => {
-                let lhs = self
-                    .parse_expression_within(0)
-                    .wrap_err("in bracketed expression")?;
-                self.lexer
-                    .expect(TokenKind::RightParen, "Expected ')'")
-                    .wrap_err("after bracketed expression")?;
-                lhs
-            }
-            Token {
-                kind: TokenKind::Return | TokenKind::Print,
-                ..
-            } => {
-                let op = match lhs.kind {
-                    TokenKind::Return => Op::Return,
-                    TokenKind::Print => Op::Print,
-                    _ => unreachable!(),
-                };
-                let ((), r_bp) = prefix_binding_power(op);
-                let rhs = self
-                    .parse_expression_within(r_bp)
-                    .wrap_err("in right-hand side")?;
-                return Ok(TokenTree::Cons(op, vec![rhs]));
-            }
-
-            Token {
-                kind: TokenKind::For,
-                ..
-            } => {
-                self.lexer
-                    .expect(TokenKind::LeftParen, "Expected '(' after 'for'")
-                    .wrap_err("in for loop condition")?;
-
-                // let init = self
-                //     .parse_expression_within(0)
-                //     .wrap_err_with(|| format!("in init condition of for loop"))?;
-
-                let init = self
-                    .parse_statement_within(0)
-                    .wrap_err_with(|| format!("in init condition of for loop"))?;
-
-                // self.lexer
-                //     .expect(TokenKind::Semicolon, "Expected ';' after for loop init")
-                //     .wrap_err("in for loop condition")?;
-
-                let cond = self
-                    .parse_expression_within(0)
-                    .wrap_err_with(|| format!("in loop condition of for loop"))?;
-
-                self.lexer
-                    .expect(
-                        TokenKind::Semicolon,
-                        "Expected ';' after for loop condition",
-                    )
-                    .wrap_err("in for loop condition")?;
-
-                let inc = self
-                    .parse_expression_within(0)
-                    .wrap_err_with(|| format!("in incremental condition of for loop"))?;
-
-                self.lexer
-                    .expect(TokenKind::RightParen, "Expected ')' after 'for'")
-                    .wrap_err("in for loop condition")?;
-
-                let block = self.parse_block().wrap_err("in body of for loop")?;
-
-                return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
-            }
-
-            Token {
-                kind: TokenKind::While,
-                ..
-            } => {
-                self.lexer
-                    .expect(TokenKind::LeftParen, "Expected '(' after 'while'")
-                    .wrap_err("in while loop condition")?;
-
-                let cond = self
-                    .parse_expression_within(0)
-                    .wrap_err_with(|| format!("in condition of while loop"))?;
-
-                self.lexer
-                    .expect(TokenKind::RightParen, "Expected ')' after 'while'")
-                    .wrap_err("in while loop condition")?;
-
-                let block = self.parse_block().wrap_err("in body of while loop")?;
-
-                return Ok(TokenTree::Cons(Op::While, vec![cond, block]));
-            }
-
-            Token {
-                kind: TokenKind::Class,
-                ..
-            } => {
-                let token = self
-                    .lexer
-                    .expect(TokenKind::Ident, "Expected identifier")
-                    .wrap_err("in class name")?;
-                let ident = TokenTree::Atom(Atom::Ident(token.literal));
-
-                let block = self.parse_block().wrap_err("in class definition")?;
-
-                return Ok(TokenTree::Cons(Op::Class, vec![ident, block]));
-            }
-            Token {
-                kind: TokenKind::Var,
-                ..
-            } => {
-                let token = self
-                    .lexer
-                    .expect(TokenKind::Ident, "Expected identifier")
-                    .wrap_err("in variable assignment")?;
-
-                let ident = TokenTree::Atom(Atom::Ident(token.literal));
-
-                self.lexer
-                    .expect(TokenKind::Equal, "Expected '=' after variable name")
-                    .wrap_err("in variable assignment")?;
-
-                let second = self
-                    .parse_expression_within(0)
-                    .wrap_err("in variable assignment expression")?;
-
-                let res = Ok(TokenTree::Cons(Op::Var, vec![ident, second]));
-
-                self.lexer
-                    .expect(
-                        TokenKind::Semicolon,
-                        "Expected ';' after variable assignment",
-                    )
-                    .wrap_err("after variable assignment")?;
-
-                return res;
-            }
-
-            Token {
-                kind: TokenKind::Fun,
-                ..
-            } => {
-                let token = self
-                    .lexer
-                    .expect(TokenKind::Ident, "Expected identifier")
-                    .wrap_err("in name declaration of function")?;
-                let name = token.literal;
-                let ident = Atom::Ident(token.literal);
-
-                self.lexer
-                    .expect(TokenKind::LeftParen, "Expected '(' after function name")
-                    .wrap_err_with(|| format!("in parameter list of function {name}"))?;
-
-                let mut params = Vec::new();
-
-                if matches!(
-                    self.lexer.peek(),
-                    Some(Ok(Token {
-                        kind: TokenKind::RightParen,
-                        ..
-                    }))
-                ) {
-                    self.lexer.next(); // Consume the right parenthesis
-                } else {
-                    loop {
-                        let param = self
-                            .lexer
-                            .expect(TokenKind::Ident, "Expected identifier")
-                            .wrap_err_with(|| {
-                                format!("in parameter #{} of function {name}", params.len() + 1)
-                            })?;
-                        params.push(param);
-
-                        let token = self
-                            .lexer
-                            .expect_where(
-                                |token| {
-                                    matches!(token.kind, TokenKind::Comma | TokenKind::RightParen)
-                                },
-                                "Expected ',' or ')' after function parameter",
-                            )
-                            .wrap_err_with(|| format!("in parameter list of function {name}"))?;
-
-                        if token.kind == TokenKind::RightParen {
-                            break;
-                        }
-                    }
+            let statement = match self.lexer.next() {
+                Some(Ok(token)) => token,
+                None => {
+                    return Ok(TokenTree::Atom(Atom::Nil));
                 }
-
-                let body = self
-                    .parse_block()
-                    .wrap_err_with(|| format!("in body of function {name}"))?;
-
-                return Ok(TokenTree::Fun {
-                    name: ident,
-                    params,
-                    body: Box::new(body),
-                });
-            }
-
-            Token {
-                kind: TokenKind::If,
-                ..
-            } => {
-                self.lexer
-                    .expect(TokenKind::LeftParen, "Expected '(' after 'if'")
-                    .wrap_err("in if condition")?;
-
-                let cond = self
-                    .parse_expression_within(0)
-                    .wrap_err("in if condition")?;
-
-                self.lexer
-                    .expect(TokenKind::RightParen, "Expected ')' after 'if'")
-                    .wrap_err("in if condition")?;
-
-                let block = self.parse_block().wrap_err("in body of if statement")?;
-
-                let mut otherwise = None;
-                if matches!(
-                    self.lexer.peek(),
-                    Some(Ok(Token {
-                        kind: TokenKind::Else,
-                        ..
-                    }))
-                ) {
-                    self.lexer.next(); // Consume the 'else' token
-                    let else_block = self.parse_block().wrap_err("in body of else statement")?;
-                    otherwise = Some(else_block);
+                Some(Err(e)) => {
+                    return Err(e).wrap_err("Error while parsing statement");
                 }
+            };
 
-                return Ok(TokenTree::If {
-                    condition: Box::new(cond),
-                    then_branch: Box::new(block),
-                    else_branch: otherwise.map(Box::new),
-                });
-            }
-            token => {
-                return Err(miette::miette! {
-                    labels = vec![
-                        LabeledSpan::at(
-                            self.lexer.byte - token.literal.len()..self.lexer.byte,
-                            "here",
-                        )
-                    ],
-                    "expected a statement"
-                }
-                .with_source_code(self.whole.to_string()));
-            }
-        };
-
-        loop {
-            let bytes = self.lexer.byte;
-            let op = self.lexer.peek();
-            if op.map_or(false, |op| op.is_err()) {
-                return Err(self
-                    .lexer
-                    .next()
-                    .expect("Error while lexing")
-                    .expect_err("peeked token")
-                    .wrap_err("in place of operator"));
-            }
-            let op = match op.map(|res| res.as_ref().expect("peeked token")) {
-                None => break,
-                Some(Token {
-                    kind: TokenKind::LeftParen,
-                    ..
-                }) => Op::Call,
-                Some(Token {
-                    kind: TokenKind::Dot,
-                    ..
-                }) => Op::Field,
-                Some(Token {
+            let statement = match statement {
+                Token {
                     kind: TokenKind::Semicolon,
                     ..
-                }) => break,
+                } => {
+                    return Ok(TokenTree::Atom(Atom::Nil));
+                }
+                Token {
+                    kind: TokenKind::Return | TokenKind::Print,
+                    ..
+                } => {
+                    let op = match statement.kind {
+                        TokenKind::Return => Op::Return,
+                        TokenKind::Print => Op::Print,
+                        _ => unreachable!(),
+                    };
+                    let ((), r_bp) = prefix_binding_power(op);
+                    let expression = self
+                        .parse_expression_within(r_bp)
+                        .wrap_err("parsing expression")?;
+                    TokenTree::Cons(op, vec![expression])
+                }
 
-                Some(token) => {
+                Token {
+                    kind: TokenKind::For,
+                    ..
+                } => {
+                    self.lexer
+                        .expect(TokenKind::LeftParen, "Expected '(' after 'for'")
+                        .wrap_err("in for loop condition")?;
+
+                    // let init = self
+                    //     .parse_expression_within(0)
+                    //     .wrap_err_with(|| format!("in init condition of for loop"))?;
+
+                    let init = self
+                        .parse_statement_within(0)
+                        .wrap_err_with(|| format!("in init condition of for loop"))?;
+
+                    // self.lexer
+                    //     .expect(TokenKind::Semicolon, "Expected ';' after for loop init")
+                    //     .wrap_err("in for loop condition")?;
+
+                    let cond = self
+                        .parse_expression_within(0)
+                        .wrap_err_with(|| format!("in loop condition of for loop"))?;
+
+                    self.lexer
+                        .expect(
+                            TokenKind::Semicolon,
+                            "Expected ';' after for loop condition",
+                        )
+                        .wrap_err("in for loop condition")?;
+
+                    let inc = self
+                        .parse_expression_within(0)
+                        .wrap_err_with(|| format!("in incremental condition of for loop"))?;
+
+                    self.lexer
+                        .expect(TokenKind::RightParen, "Expected ')' after 'for'")
+                        .wrap_err("in for loop condition")?;
+
+                    let block = self.parse_block().wrap_err("in body of for loop")?;
+
+                    return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
+                }
+
+                Token {
+                    kind: TokenKind::While,
+                    ..
+                } => {
+                    self.lexer
+                        .expect(TokenKind::LeftParen, "Expected '(' after 'while'")
+                        .wrap_err("in while loop condition")?;
+
+                    let cond = self
+                        .parse_expression_within(0)
+                        .wrap_err_with(|| format!("in condition of while loop"))?;
+
+                    self.lexer
+                        .expect(TokenKind::RightParen, "Expected ')' after 'while'")
+                        .wrap_err("in while loop condition")?;
+
+                    let block = self.parse_block().wrap_err("in body of while loop")?;
+
+                    return Ok(TokenTree::Cons(Op::While, vec![cond, block]));
+                }
+
+                Token {
+                    kind: TokenKind::Class,
+                    ..
+                } => {
+                    let token = self
+                        .lexer
+                        .expect(TokenKind::Ident, "Expected identifier")
+                        .wrap_err("in class name")?;
+                    let ident = TokenTree::Atom(Atom::Ident(token.literal));
+
+                    let block = self.parse_block().wrap_err("in class definition")?;
+
+                    return Ok(TokenTree::Cons(Op::Class, vec![ident, block]));
+                }
+                Token {
+                    kind: TokenKind::Var,
+                    ..
+                } => {
+                    let token = self
+                        .lexer
+                        .expect(TokenKind::Ident, "Expected identifier")
+                        .wrap_err("in variable assignment")?;
+
+                    let ident = TokenTree::Atom(Atom::Ident(token.literal));
+
+                    self.lexer
+                        .expect(TokenKind::Equal, "Expected '=' after variable name")
+                        .wrap_err("in variable assignment")?;
+
+                    let second = self
+                        .parse_expression_within(0)
+                        .wrap_err("in variable assignment expression")?;
+
+                    TokenTree::Cons(Op::Var, vec![ident, second])
+                }
+
+                Token {
+                    kind: TokenKind::Fun,
+                    ..
+                } => {
+                    let token = self
+                        .lexer
+                        .expect(TokenKind::Ident, "Expected identifier")
+                        .wrap_err("in name declaration of function")?;
+                    let name = token.literal;
+                    let ident = Atom::Ident(token.literal);
+
+                    self.lexer
+                        .expect(TokenKind::LeftParen, "Expected '(' after function name")
+                        .wrap_err_with(|| format!("in parameter list of function {name}"))?;
+
+                    let mut params = Vec::new();
+
+                    if matches!(
+                        self.lexer.peek(),
+                        Some(Ok(Token {
+                            kind: TokenKind::RightParen,
+                            ..
+                        }))
+                    ) {
+                        self.lexer.next(); // Consume the right parenthesis
+                    } else {
+                        loop {
+                            let param = self
+                                .lexer
+                                .expect(TokenKind::Ident, "Expected identifier")
+                                .wrap_err_with(|| {
+                                    format!("in parameter #{} of function {name}", params.len() + 1)
+                                })?;
+                            params.push(param);
+
+                            let token = self
+                                .lexer
+                                .expect_where(
+                                    |token| {
+                                        matches!(
+                                            token.kind,
+                                            TokenKind::Comma | TokenKind::RightParen
+                                        )
+                                    },
+                                    "Expected ',' or ')' after function parameter",
+                                )
+                                .wrap_err_with(|| {
+                                    format!("in parameter list of function {name}")
+                                })?;
+
+                            if token.kind == TokenKind::RightParen {
+                                break;
+                            }
+                        }
+                    }
+
+                    let body = self
+                        .parse_block()
+                        .wrap_err_with(|| format!("in body of function {name}"))?;
+
+                    return Ok(TokenTree::Fun {
+                        name: ident,
+                        params,
+                        body: Box::new(body),
+                    });
+                }
+
+                Token {
+                    kind: TokenKind::If,
+                    ..
+                } => {
+                    self.lexer
+                        .expect(TokenKind::LeftParen, "Expected '(' after 'if'")
+                        .wrap_err("in if condition")?;
+
+                    let cond = self
+                        .parse_expression_within(0)
+                        .wrap_err("in if condition")?;
+
+                    self.lexer
+                        .expect(TokenKind::RightParen, "Expected ')' after 'if'")
+                        .wrap_err("in if condition")?;
+
+                    let block = self.parse_block().wrap_err("in body of if statement")?;
+
+                    let mut otherwise = None;
+                    if matches!(
+                        self.lexer.peek(),
+                        Some(Ok(Token {
+                            kind: TokenKind::Else,
+                            ..
+                        }))
+                    ) {
+                        self.lexer.next(); // Consume the 'else' token
+                        let else_block =
+                            self.parse_block().wrap_err("in body of else statement")?;
+                        otherwise = Some(else_block);
+                    }
+
+                    return Ok(TokenTree::If {
+                        condition: Box::new(cond),
+                        then_branch: Box::new(block),
+                        else_branch: otherwise.map(Box::new),
+                    });
+                }
+                token => {
                     return Err(miette::miette! {
-                        help = "expected an operator",
                         labels = vec![
                             LabeledSpan::at(
-                                bytes..bytes + token.literal.len(),
+                                self.lexer.byte - token.literal.len()..self.lexer.byte,
                                 "here",
                             )
                         ],
-                        "unexpected token in expression: {token:?}",
+                        "expected a statement"
                     }
                     .with_source_code(self.whole.to_string()));
                 }
             };
+            statement
+        } else {
+            let expr = self
+                .parse_expression_within(0)
+                .wrap_err("parse expression statement");
 
-            if let Some((l_bp, ())) = postfix_binding_power(op) {
-                if l_bp < min_bp {
-                    break;
-                }
-                self.lexer.next();
-
-                lhs = match op {
-                    Op::Call => TokenTree::Call {
-                        callee: Box::new(lhs),
-                        arguments: self
-                            .parse_fun_call()
-                            .wrap_err("in argument list of function call")?,
-                    },
-                    _ => TokenTree::Cons(op, vec![lhs]),
-                };
-                continue;
-            }
-
-            if let Some((l_bp, r_bp)) = infix_binding_power(op) {
-                if l_bp < min_bp {
-                    break;
-                }
-                self.lexer.next();
-
-                let rhs = self
-                    .parse_expression_within(r_bp)
-                    .wrap_err("in right-hand side of infix expression")?;
-                lhs = TokenTree::Cons(op, vec![lhs, rhs]);
-            }
-
-            break;
-        }
-        Ok(lhs)
+            expr.wrap_err("in expression statement")?
+        };
+        self.lexer
+            .expect(TokenKind::Semicolon, "In the end of statement expected ';'")?;
+        Ok(statement)
     }
     pub fn parse_expression_within(&mut self, min_bp: u8) -> Result<TokenTree<'de>, Error> {
         let lhs = match self.lexer.next() {
