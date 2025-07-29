@@ -14,23 +14,38 @@ pub struct Parser<'de> {
     lexer: Lexer<'de>,
 }
 
+pub enum StatementTree<'de> {
+    Block(Vec<TokenTree<'de>>),
+    Expression(TokenTree<'de>),
+    Fun {
+        name: Atom<'de>,
+        params: Vec<Token<'de>>,
+        body: Box<StatementTree<'de>>,
+    },
+    If {
+        condition: Box<TokenTree<'de>>,
+        then_branch: Box<StatementTree<'de>>,
+        else_branch: Option<Box<StatementTree<'de>>>,
+    },
+    For {
+        init: Box<StatementTree<'de>>,
+        condition: Box<TokenTree<'de>>,
+        increment: Box<TokenTree<'de>>,
+        body: Box<StatementTree<'de>>,
+    },
+    While {
+        condition: Box<TokenTree<'de>>,
+        body: Box<StatementTree<'de>>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenTree<'de> {
     Atom(Atom<'de>),
     Cons(Op, Vec<TokenTree<'de>>),
-    Fun {
-        name: Atom<'de>,
-        params: Vec<Token<'de>>,
-        body: Box<TokenTree<'de>>,
-    },
     Call {
         callee: Box<TokenTree<'de>>,
         arguments: Vec<TokenTree<'de>>,
-    },
-    If {
-        condition: Box<TokenTree<'de>>,
-        then_branch: Box<TokenTree<'de>>,
-        else_branch: Option<Box<TokenTree<'de>>>,
     },
 }
 
@@ -81,11 +96,11 @@ impl<'de> Parser<'de> {
         }
     }
 
-    pub fn parse(mut self) -> Result<TokenTree<'de>, Error> {
+    pub fn parse(mut self) -> Result<StatementTree<'de>, Error> {
         self.parse_statement_within(0)
     }
 
-    pub fn parse_block(&mut self) -> Result<TokenTree<'de>, Error> {
+    pub fn parse_block(&mut self) -> Result<StatementTree<'de>, Error> {
         self.lexer.expect(TokenKind::LeftBrace, "Expected '{'")?;
 
         let block = self.parse_statement_within(0)?;
@@ -126,7 +141,7 @@ impl<'de> Parser<'de> {
         Ok(arguments)
     }
 
-    pub fn parse_statement_within(&mut self, min_bp: u8) -> Result<TokenTree<'de>, Error> {
+    pub fn parse_statement_within(&mut self, min_bp: u8) -> Result<StatementTree<'de>, Error> {
         let statement = if matches!(
             self.lexer.peek(),
             Some(Ok(Token {
@@ -145,7 +160,7 @@ impl<'de> Parser<'de> {
             let statement = match self.lexer.next() {
                 Some(Ok(token)) => token,
                 None => {
-                    return Ok(TokenTree::Atom(Atom::Nil));
+                    return Ok(StatementTree::Expression(TokenTree::Atom(Atom::Nil)));
                 }
                 Some(Err(e)) => {
                     return Err(e).wrap_err("Error while parsing statement");
@@ -157,7 +172,7 @@ impl<'de> Parser<'de> {
                     kind: TokenKind::Semicolon,
                     ..
                 } => {
-                    return Ok(TokenTree::Atom(Atom::Nil));
+                    return Ok(StatementTree::Expression(TokenTree::Atom(Atom::Nil)));
                 }
                 Token {
                     kind: TokenKind::Return | TokenKind::Print,
@@ -172,7 +187,7 @@ impl<'de> Parser<'de> {
                     let expression = self
                         .parse_expression_within(r_bp)
                         .wrap_err("parsing expression")?;
-                    TokenTree::Cons(op, vec![expression])
+                    StatementTree::Expression(TokenTree::Cons(op, vec![expression]))
                 }
 
                 Token {
@@ -183,17 +198,9 @@ impl<'de> Parser<'de> {
                         .expect(TokenKind::LeftParen, "Expected '(' after 'for'")
                         .wrap_err("in for loop condition")?;
 
-                    // let init = self
-                    //     .parse_expression_within(0)
-                    //     .wrap_err_with(|| format!("in init condition of for loop"))?;
-
                     let init = self
                         .parse_statement_within(0)
                         .wrap_err_with(|| format!("in init condition of for loop"))?;
-
-                    // self.lexer
-                    //     .expect(TokenKind::Semicolon, "Expected ';' after for loop init")
-                    //     .wrap_err("in for loop condition")?;
 
                     let cond = self
                         .parse_expression_within(0)
@@ -216,7 +223,13 @@ impl<'de> Parser<'de> {
 
                     let block = self.parse_block().wrap_err("in body of for loop")?;
 
-                    return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
+                    return Ok(StatementTree::For {
+                        init: Box::new(init),
+                        condition: Box::new(cond),
+                        increment: Box::new(inc),
+                        body: Box::new(block),
+                    });
+                    // return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
                 }
 
                 Token {
@@ -237,7 +250,11 @@ impl<'de> Parser<'de> {
 
                     let block = self.parse_block().wrap_err("in body of while loop")?;
 
-                    return Ok(TokenTree::Cons(Op::While, vec![cond, block]));
+                    return Ok(StatementTree::While {
+                        condition: Box::new(cond),
+                        body: Box::new(block),
+                    });
+                    // return Ok(TokenTree::Cons(Op::While, vec![cond, block]));
                 }
 
                 Token {
@@ -250,9 +267,15 @@ impl<'de> Parser<'de> {
                         .wrap_err("in class name")?;
                     let ident = TokenTree::Atom(Atom::Ident(token.literal));
 
-                    let block = self.parse_block().wrap_err("in class definition")?;
+                    //TODO: parse class
+                    todo!("Class parsing");
+                    let block = self.parse_expression_within(0).wrap_err("in class body")?;
+                    //let block = self.parse_block().wrap_err("in class definition")?;
 
-                    return Ok(TokenTree::Cons(Op::Class, vec![ident, block]));
+                    return Ok(StatementTree::Expression(TokenTree::Cons(
+                        Op::Class,
+                        vec![ident, block],
+                    )));
                 }
                 Token {
                     kind: TokenKind::Var,
@@ -273,7 +296,7 @@ impl<'de> Parser<'de> {
                         .parse_expression_within(0)
                         .wrap_err("in variable assignment expression")?;
 
-                    TokenTree::Cons(Op::Var, vec![ident, second])
+                    StatementTree::Expression(TokenTree::Cons(Op::Var, vec![ident, second]))
                 }
 
                 Token {
@@ -336,7 +359,7 @@ impl<'de> Parser<'de> {
                         .parse_block()
                         .wrap_err_with(|| format!("in body of function {name}"))?;
 
-                    return Ok(TokenTree::Fun {
+                    return Ok(StatementTree::Fun {
                         name: ident,
                         params,
                         body: Box::new(body),
@@ -375,7 +398,7 @@ impl<'de> Parser<'de> {
                         otherwise = Some(else_block);
                     }
 
-                    return Ok(TokenTree::If {
+                    return Ok(StatementTree::If {
                         condition: Box::new(cond),
                         then_branch: Box::new(block),
                         else_branch: otherwise.map(Box::new),
@@ -400,7 +423,7 @@ impl<'de> Parser<'de> {
                 .parse_expression_within(0)
                 .wrap_err("parse expression statement");
 
-            expr.wrap_err("in expression statement")?
+            StatementTree::Expression(expr.wrap_err("in expression statement")?)
         };
         self.lexer
             .expect(TokenKind::Semicolon, "In the end of statement expected ';'")?;
@@ -689,13 +712,6 @@ impl Display for TokenTree<'_> {
                 }
                 write!(f, ")")
             }
-            TokenTree::Fun { name, params, body } => {
-                write!(f, "(def {name}")?;
-                for para in params {
-                    write!(f, " {para}")?;
-                }
-                write!(f, " {body})")
-            }
             TokenTree::Call { callee, arguments } => {
                 write!(f, "({callee}")?;
                 for arg in arguments {
@@ -703,7 +719,21 @@ impl Display for TokenTree<'_> {
                 }
                 write!(f, ")")
             }
-            TokenTree::If {
+        }
+    }
+}
+
+impl Display for StatementTree<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StatementTree::Fun { name, params, body } => {
+                write!(f, "(def {name}")?;
+                for para in params {
+                    write!(f, " {para}")?;
+                }
+                write!(f, " {body})")
+            }
+            StatementTree::If {
                 condition,
                 then_branch,
                 else_branch,
@@ -714,6 +744,15 @@ impl Display for TokenTree<'_> {
                 }
                 write!(f, ")")
             }
+            StatementTree::Block(token_trees) => todo!(),
+            StatementTree::Expression(token_tree) => write!(f, "{token_tree}"),
+            StatementTree::For {
+                init,
+                condition,
+                increment,
+                body,
+            } => write!(f, "(for {init} {condition} {increment} {body})"),
+            StatementTree::While { condition, body } => todo!(),
         }
     }
 }
