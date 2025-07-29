@@ -15,7 +15,7 @@ pub struct Parser<'de> {
 }
 
 pub enum StatementTree<'de> {
-    Block(Vec<TokenTree<'de>>),
+    Block(Vec<StatementTree<'de>>),
     Expression(TokenTree<'de>),
     Fun {
         name: Atom<'de>,
@@ -103,11 +103,23 @@ impl<'de> Parser<'de> {
     pub fn parse_block(&mut self) -> Result<StatementTree<'de>, Error> {
         self.lexer.expect(TokenKind::LeftBrace, "Expected '{'")?;
 
-        let block = self.parse_statement_within(0)?;
+        let mut block = Vec::new();
+        while !matches!(
+            self.lexer.peek(),
+            Some(Ok(Token {
+                kind: TokenKind::RightBrace,
+                ..
+            }))
+        ) {
+            let statement = self
+                .parse_statement_within(0)
+                .wrap_err("parsing block statement")?;
+            block.push(statement);
+        }
 
         self.lexer.expect(TokenKind::RightBrace, "Expected '}''")?;
 
-        Ok(block)
+        Ok(StatementTree::Block(block))
     }
 
     pub fn parse_fun_call(&mut self) -> Result<Vec<TokenTree<'de>>, Error> {
@@ -744,7 +756,13 @@ impl Display for StatementTree<'_> {
                 }
                 write!(f, ")")
             }
-            StatementTree::Block(token_trees) => todo!(),
+            StatementTree::Block(token_trees) => {
+                write!(f, "{{")?;
+                for tree in token_trees {
+                    write!(f, " {tree}")?;
+                }
+                write!(f, " }}")
+            }
             StatementTree::Expression(token_tree) => write!(f, "{token_tree}"),
             StatementTree::For {
                 init,

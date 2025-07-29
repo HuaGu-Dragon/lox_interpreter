@@ -1,5 +1,6 @@
 if (a.foo(true, 42, "hello banana" + " also")) {
     print a + b * c / d;
+    var a = b;
 } else {
     if (a >= b) {
         var c = 1 + 2;
@@ -14,7 +15,10 @@ if (a.foo(true, 42, "hello banana" + " also")) {
                     sum = sum + i;
                 }
             } else {
-                ;
+                ;;;;
+                if (false) {
+
+                }
             }
         }
     }
