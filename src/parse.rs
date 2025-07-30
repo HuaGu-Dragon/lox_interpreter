@@ -214,9 +214,18 @@ impl<'de> Parser<'de> {
                         .parse_statement_within(0)
                         .wrap_err_with(|| format!("in init condition of for loop"))?;
 
-                    let cond = self
-                        .parse_expression_within(0)
-                        .wrap_err_with(|| format!("in loop condition of for loop"))?;
+                    let cond = if matches!(
+                        self.lexer.peek(),
+                        Some(Ok(Token {
+                            kind: TokenKind::Semicolon,
+                            ..
+                        }))
+                    ) {
+                        TokenTree::Atom(Atom::Boolean(true))
+                    } else {
+                        self.parse_expression_within(0)
+                            .wrap_err_with(|| format!("in loop condition of for loop"))?
+                    };
 
                     self.lexer
                         .expect(
@@ -225,10 +234,18 @@ impl<'de> Parser<'de> {
                         )
                         .wrap_err("in for loop condition")?;
 
-                    let inc = self
-                        .parse_expression_within(0)
-                        .wrap_err_with(|| format!("in incremental condition of for loop"))?;
-
+                    let inc = if matches!(
+                        self.lexer.peek(),
+                        Some(Ok(Token {
+                            kind: TokenKind::RightParen,
+                            ..
+                        }))
+                    ) {
+                        TokenTree::Atom(Atom::Nil)
+                    } else {
+                        self.parse_expression_within(0)
+                            .wrap_err_with(|| format!("in incremental condition of for loop"))?
+                    };
                     self.lexer
                         .expect(TokenKind::RightParen, "Expected ')' after 'for'")
                         .wrap_err("in for loop condition")?;

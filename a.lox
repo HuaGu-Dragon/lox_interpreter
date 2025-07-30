@@ -17,7 +17,9 @@ if (a.foo(true, 42, "hello banana" + " also")) {
             } else {
                 ;;;;
                 if (false) {
+                    for (;;) {
 
+                    }
                 }
             }
         }
