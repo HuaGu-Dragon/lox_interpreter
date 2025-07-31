@@ -66,8 +66,16 @@ fn main() -> miette::Result<()> {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("reading `{}` failed", filename.display()))?;
 
-            let parser = lox_interpreter::Parser::new(filename.to_str(), &file_contents);
-            eprintln!("{}", parser.parse().wrap_err("Failed to parse file")?);
+            for statement in lox_interpreter::Parser::new(filename.to_str(), &file_contents) {
+                let statement = match statement {
+                    Ok(statement) => statement,
+                    Err(e) => {
+                        eprintln!("{e:?}");
+                        return Err(e);
+                    }
+                };
+                println!("{statement}");
+            }
         }
     }
     Ok(())

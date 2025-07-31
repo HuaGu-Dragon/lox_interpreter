@@ -88,6 +88,17 @@ pub enum Op {
     Call,
 }
 
+impl<'de> Iterator for Parser<'de> {
+    type Item = Result<StatementTree<'de>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.lexer.peek() {
+            Some(_) => Some(self.parse_statement_within(0)),
+            None => None,
+        }
+    }
+}
+
 impl<'de> Parser<'de> {
     pub fn new(filename: Option<&'de str>, whole: &'de str) -> Self {
         Parser {
