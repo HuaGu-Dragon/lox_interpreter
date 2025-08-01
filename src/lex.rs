@@ -41,7 +41,22 @@ impl StringTerminationError {
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("Unexpected end of file")]
-pub struct Eof;
+#[diagnostic(help(
+    "The file ended unexpectedly, possibly due to a missing closing brace or parenthesis."
+))]
+pub struct Eof {
+    #[source_code]
+    src: NamedSource<String>,
+
+    #[label("Syntax Error: Unexpected end of file")]
+    bad_line: SourceSpan,
+}
+
+impl Eof {
+    pub fn line(&self) -> usize {
+        self.src.inner()[..=self.bad_line.offset()].lines().count()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token<'de> {
@@ -183,7 +198,14 @@ impl<'de> Lexer<'de> {
             )
             .with_source_code(self.whole.to_string())),
             Some(Err(e)) => Err(e),
-            None => Err(Eof.into()),
+            None => Err(Eof {
+                src: NamedSource::new(
+                    self.filename.unwrap_or_else(|| "<input>"),
+                    self.whole.to_string(),
+                ),
+                bad_line: SourceSpan::from(self.byte - 1..self.byte),
+            }
+            .into()),
         }
     }
 

@@ -57,9 +57,9 @@ fn main() -> miette::Result<()> {
                         return Err(e);
                     }
                 };
-                println!("// expect: {token}");
+                println!("{token}");
             }
-            println!("// expect: EOF  null");
+            println!("EOF  null");
         }
         Commands::Parse { filename } => {
             let file_contents = fs::read_to_string(&filename)
@@ -70,7 +70,12 @@ fn main() -> miette::Result<()> {
                 let statement = match statement {
                     Ok(statement) => statement,
                     Err(e) => {
-                        eprintln!("{e:?}");
+                        if let Some(eof) = e.downcast_ref::<lox_interpreter::lex::Eof>() {
+                            eprintln!("[line {}] Error: Unexpected end of file", eof.line());
+                            eprintln!("{e:?}");
+
+                            std::process::exit(65);
+                        };
                         return Err(e);
                     }
                 };
@@ -80,42 +85,3 @@ fn main() -> miette::Result<()> {
     }
     Ok(())
 }
-// expect: LEFT_PAREN ( null
-// expect: RIGHT_PAREN ) null
-// expect: LEFT_BRACE { null
-// expect: RIGHT_BRACE } null
-// expect: SEMICOLON ; null
-// expect: COMMA , null
-// expect: PLUS + null
-// expect: MINUS - null
-// expect: STAR * null
-// expect: BANG_EQUAL != null
-// expect: EQUAL_EQUAL == null
-// expect: LESS_EQUAL <= null
-// expect: GREATER_EQUAL >= null
-// expect: BANG_EQUAL != null
-// expect: LESS < null
-// expect: GREATER > null
-// expect: SLASH / null
-// expect: DOT . null
-// expect: EOF  null
-
-// expect: LEFT_PAREN ( null
-// expect: RIGHT_PAREN ) null
-// expect: LEFT_BRACE { null
-// expect: RIGHT_BRACE } null
-// expect: SEMICOLON ; null
-// expect: COMMA , null
-// expect: PLUS + null
-// expect: MINUS - null
-// expect: STAR * null
-// expect: BANG_EQUAL != null
-// expect: EQUAL_EQUAL == null
-// expect: LESS_EQUAL <= null
-// expect: GREATER_EQUAL >= null
-// expect: BANG_EQUAL != null
-// expect: LESS < null
-// expect: GREATER > null
-// expect: SLASH / null
-// expect: DOT . null
-// expect: EOF  null
