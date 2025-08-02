@@ -93,7 +93,7 @@ impl<'de> Iterator for Parser<'de> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.lexer.peek() {
-            Some(_) => Some(self.parse_statement_within(0)),
+            Some(_) => Some(self.parse_statement_within()),
             None => None,
         }
     }
@@ -108,7 +108,7 @@ impl<'de> Parser<'de> {
     }
 
     pub fn parse(mut self) -> Result<StatementTree<'de>, Error> {
-        self.parse_statement_within(0)
+        self.parse_statement_within()
     }
 
     pub fn parse_block(&mut self) -> Result<StatementTree<'de>, Error> {
@@ -123,7 +123,7 @@ impl<'de> Parser<'de> {
             }))
         ) {
             let statement = self
-                .parse_statement_within(0)
+                .parse_statement_within()
                 .wrap_err("parsing block statement")?;
             block.push(statement);
         }
@@ -164,7 +164,7 @@ impl<'de> Parser<'de> {
         Ok(arguments)
     }
 
-    pub fn parse_statement_within(&mut self, min_bp: u8) -> Result<StatementTree<'de>, Error> {
+    pub fn parse_statement_within(&mut self) -> Result<StatementTree<'de>, Error> {
         let statement = if matches!(
             self.lexer.peek(),
             Some(Ok(Token {
@@ -222,7 +222,7 @@ impl<'de> Parser<'de> {
                         .wrap_err("in for loop condition")?;
 
                     let init = self
-                        .parse_statement_within(0)
+                        .parse_statement_within()
                         .wrap_err_with(|| format!("in init condition of for loop"))?;
 
                     let cond = if matches!(
