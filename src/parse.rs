@@ -269,7 +269,6 @@ impl<'de> Parser<'de> {
                         increment: Box::new(inc),
                         body: Box::new(block),
                     });
-                    // return Ok(TokenTree::Cons(Op::For, vec![init, cond, inc, block]));
                 }
 
                 Token {
@@ -798,7 +797,7 @@ impl Display for StatementTree<'_> {
                 increment,
                 body,
             } => write!(f, "(for {init} {condition} {increment} {body})"),
-            StatementTree::While { condition, body } => todo!(),
+            StatementTree::While { condition, body } => write!(f, "(while {condition} {body})"),
         }
     }
 }
