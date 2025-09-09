@@ -25,4 +25,4 @@ if (a.foo(true, 42, "hello banana" + " also")) {
         }
     }
 }
-print "second statement"
+print "second statement";

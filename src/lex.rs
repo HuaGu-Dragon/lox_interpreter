@@ -199,10 +199,7 @@ impl<'de> Lexer<'de> {
             .with_source_code(self.whole.to_string())),
             Some(Err(e)) => Err(e),
             None => Err(Eof {
-                src: NamedSource::new(
-                    self.filename.unwrap_or_else(|| "<input>"),
-                    self.whole.to_string(),
-                ),
+                src: NamedSource::new(self.filename.unwrap_or("<input>"), self.whole.to_string()),
                 bad_line: SourceSpan::from(self.byte - 1..self.byte),
             }
             .into()),
@@ -266,7 +263,7 @@ impl<'de> Iterator for Lexer<'de> {
                 c => {
                     return Some(Err(SingleTokenError {
                         src: NamedSource::new(
-                            self.filename.unwrap_or_else(|| "<input>"),
+                            self.filename.unwrap_or("<input>"),
                             self.whole.to_string(),
                         ),
                         bad_bit: SourceSpan::from(self.byte - c.len_utf8()..self.byte),
@@ -290,7 +287,7 @@ impl<'de> Iterator for Lexer<'de> {
                     } else {
                         return Some(Err(StringTerminationError {
                             src: NamedSource::new(
-                                self.filename.unwrap_or_else(|| "<input>"),
+                                self.filename.unwrap_or("<input>"),
                                 self.whole.to_string(),
                             ),
                             bad_line: SourceSpan::from(self.byte - c.len_utf8()..self.whole.len()),
@@ -300,7 +297,7 @@ impl<'de> Iterator for Lexer<'de> {
                 }
                 Start::Slash => {
                     if self.rest.starts_with('/') {
-                        let new_line = self.rest.find('\n').unwrap_or_else(|| self.rest.len());
+                        let new_line = self.rest.find('\n').unwrap_or(self.rest.len());
                         self.byte += new_line;
                         self.rest = &self.rest[new_line..];
                         continue; // Skip single-line comment
@@ -311,7 +308,7 @@ impl<'de> Iterator for Lexer<'de> {
                 Start::Ident => {
                     let first_non_ident = cur
                         .find(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
-                        .unwrap_or_else(|| cur.len());
+                        .unwrap_or(cur.len());
 
                     let literal = &cur[..first_non_ident];
 
@@ -344,7 +341,7 @@ impl<'de> Iterator for Lexer<'de> {
                 Start::Number => {
                     let first_non_digit = cur
                         .find(|c| !matches!(c, '0'..='9' | '.'))
-                        .unwrap_or_else(|| cur.len());
+                        .unwrap_or(cur.len());
 
                     let mut literal = &cur[..first_non_digit];
 
@@ -353,9 +350,7 @@ impl<'de> Iterator for Lexer<'de> {
                         (Some(one), Some(two), Some(_)) => {
                             literal = &literal[..one.len() + two.len() + 1]
                         }
-                        (Some(one), Some(two), None) if two.is_empty() => {
-                            literal = &literal[..one.len()]
-                        }
+                        (Some(one), Some(""), None) => literal = &literal[..one.len()],
                         _ => {}
                     };
 

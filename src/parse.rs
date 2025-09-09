@@ -92,9 +92,10 @@ impl<'de> Iterator for Parser<'de> {
     type Item = Result<StatementTree<'de>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.lexer.peek() {
-            Some(_) => Some(self.parse_statement_within()),
-            None => None,
+        if self.lexer.peek().is_some() {
+            Some(self.parse_statement_within())
+        } else {
+            None
         }
     }
 }
@@ -190,7 +191,7 @@ impl<'de> Parser<'de> {
                 }
             };
 
-            let statement = match statement {
+            match statement {
                 Token {
                     kind: TokenKind::Semicolon,
                     ..
@@ -223,7 +224,7 @@ impl<'de> Parser<'de> {
 
                     let init = self
                         .parse_statement_within()
-                        .wrap_err_with(|| format!("in init condition of for loop"))?;
+                        .wrap_err_with(|| "in init condition of for loop".to_string())?;
 
                     let cond = if matches!(
                         self.lexer.peek(),
@@ -235,7 +236,7 @@ impl<'de> Parser<'de> {
                         TokenTree::Atom(Atom::Boolean(true))
                     } else {
                         self.parse_expression_within(0)
-                            .wrap_err_with(|| format!("in loop condition of for loop"))?
+                            .wrap_err_with(|| "in loop condition of for loop".to_string())?
                     };
 
                     self.lexer
@@ -255,7 +256,7 @@ impl<'de> Parser<'de> {
                         TokenTree::Atom(Atom::Nil)
                     } else {
                         self.parse_expression_within(0)
-                            .wrap_err_with(|| format!("in incremental condition of for loop"))?
+                            .wrap_err_with(|| "in incremental condition of for loop".to_string())?
                     };
                     self.lexer
                         .expect(TokenKind::RightParen, "Expected ')' after 'for'")
@@ -281,7 +282,7 @@ impl<'de> Parser<'de> {
 
                     let cond = self
                         .parse_expression_within(0)
-                        .wrap_err_with(|| format!("in condition of while loop"))?;
+                        .wrap_err_with(|| "in condition of while loop".to_string())?;
 
                     self.lexer
                         .expect(TokenKind::RightParen, "Expected ')' after 'while'")
@@ -304,17 +305,17 @@ impl<'de> Parser<'de> {
                         .lexer
                         .expect(TokenKind::Ident, "Expected identifier")
                         .wrap_err("in class name")?;
-                    let ident = TokenTree::Atom(Atom::Ident(token.literal));
+                    let _ident = TokenTree::Atom(Atom::Ident(token.literal));
 
                     //TODO: parse class
                     todo!("Class parsing");
-                    let block = self.parse_expression_within(0).wrap_err("in class body")?;
-                    //let block = self.parse_block().wrap_err("in class definition")?;
+                    // let block = self.parse_expression_within(0).wrap_err("in class body")?;
+                    // let block = self.parse_block().wrap_err("in class definition")?;
 
-                    return Ok(StatementTree::Expression(TokenTree::Cons(
-                        Op::Class,
-                        vec![ident, block],
-                    )));
+                    // return Ok(StatementTree::Expression(TokenTree::Cons(
+                    //     Op::Class,
+                    //     vec![ident, block],
+                    // )));
                 }
                 Token {
                     kind: TokenKind::Var,
@@ -455,8 +456,7 @@ impl<'de> Parser<'de> {
                     }
                     .with_source_code(self.whole.to_string()));
                 }
-            };
-            statement
+            }
         } else {
             let expr = self
                 .parse_expression_within(0)
@@ -561,7 +561,7 @@ impl<'de> Parser<'de> {
         loop {
             let bytes = self.lexer.byte;
             let op = self.lexer.peek();
-            if op.map_or(false, |op| op.is_err()) {
+            if op.is_some_and(|op| op.is_err()) {
                 return Err(self
                     .lexer
                     .next()
@@ -743,7 +743,7 @@ impl Display for Atom<'_> {
 impl Display for TokenTree<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenTree::Atom(atom) => write!(f, "{}", atom),
+            TokenTree::Atom(atom) => write!(f, "{atom}"),
             TokenTree::Cons(op, token_trees) => {
                 write!(f, "({op}")?;
                 for s in token_trees {
