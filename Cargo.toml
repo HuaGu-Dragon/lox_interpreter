@@ -5,6 +5,5 @@ edition = "2024"
 
 [dependencies]
 miette = { version = "7", features = ["fancy"] }
-bytes = "1"
 clap = { version = "4.5.41", features = ["derive"] }
 thiserror = "2.0.12"
