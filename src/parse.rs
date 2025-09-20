@@ -6,7 +6,7 @@ use miette::{Context, Error, LabeledSpan};
 
 use crate::{
     Lexer,
-    lex::{Token, TokenKind},
+    lex::{Eof, Token, TokenKind},
 };
 
 pub struct Parser<'de> {
@@ -35,6 +35,11 @@ pub enum StatementTree<'de> {
     },
     While {
         condition: Box<TokenTree<'de>>,
+        body: Box<StatementTree<'de>>,
+    },
+    Class {
+        name: Atom<'de>,
+        father: Option<Atom<'de>>,
         body: Box<StatementTree<'de>>,
     },
 }
@@ -110,6 +115,10 @@ impl<'de> Parser<'de> {
 
     pub fn parse(mut self) -> Result<StatementTree<'de>, Error> {
         self.parse_statement_within()
+    }
+
+    pub fn parse_expr(mut self) -> Result<TokenTree<'de>, Error> {
+        self.parse_expression_within(0)
     }
 
     pub fn parse_block(&mut self) -> Result<StatementTree<'de>, Error> {
@@ -307,8 +316,10 @@ impl<'de> Parser<'de> {
                         .wrap_err("in class name")?;
                     let _ident = TokenTree::Atom(Atom::Ident(token.literal));
 
-                    //TODO: parse class
-                    todo!("Class parsing");
+                    // let class_block = self.parse_class_body().wrap_err("in class body")?;
+
+                    // TODO: support inheritance
+                    todo!()
                     // let block = self.parse_expression_within(0).wrap_err("in class body")?;
                     // let block = self.parse_block().wrap_err("in class definition")?;
 
@@ -472,7 +483,7 @@ impl<'de> Parser<'de> {
         let lhs = match self.lexer.next() {
             Some(Ok(token)) => token,
             None => {
-                return Ok(TokenTree::Atom(Atom::Nil));
+                return Err(Eof::build(&self.lexer).into());
             }
             Some(Err(e)) => {
                 return Err(e).wrap_err("Error while parsing left-hand side of expression");
@@ -798,6 +809,8 @@ impl Display for StatementTree<'_> {
                 body,
             } => write!(f, "(for {init} {condition} {increment} {body})"),
             StatementTree::While { condition, body } => write!(f, "(while {condition} {body})"),
+            // TODO: support inheritance
+            StatementTree::Class { name, father, body } => todo!(),
         }
     }
 }

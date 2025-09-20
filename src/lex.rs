@@ -53,6 +53,13 @@ pub struct Eof {
 }
 
 impl Eof {
+    pub fn build(lexer: &Lexer<'_>) -> Self {
+        Eof {
+            src: NamedSource::new(lexer.filename.unwrap_or("<input>"), lexer.whole.to_string()),
+            bad_line: SourceSpan::from(lexer.byte - 1..lexer.byte),
+        }
+    }
+
     pub fn line(&self) -> usize {
         self.src.inner()[..=self.bad_line.offset()].lines().count()
     }
@@ -198,11 +205,7 @@ impl<'de> Lexer<'de> {
             )
             .with_source_code(self.whole.to_string())),
             Some(Err(e)) => Err(e),
-            None => Err(Eof {
-                src: NamedSource::new(self.filename.unwrap_or("<input>"), self.whole.to_string()),
-                bad_line: SourceSpan::from(self.byte - 1..self.byte),
-            }
-            .into()),
+            None => Err(Eof::build(self).into()),
         }
     }
 

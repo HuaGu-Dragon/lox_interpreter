@@ -18,7 +18,8 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Tokenize { filename: PathBuf },
-    Parse { filename: PathBuf },
+    Parse { expr: String },
+    ParseFile { filename: PathBuf },
 }
 
 fn main() -> miette::Result<()> {
@@ -61,7 +62,23 @@ fn main() -> miette::Result<()> {
             }
             println!("EOF  null");
         }
-        Commands::Parse { filename } => {
+        Commands::Parse { expr } => {
+            let parser = lox_interpreter::Parser::new(None, &expr);
+            let expr = match parser.parse_expr() {
+                Ok(expr) => expr,
+                Err(e) => {
+                    if let Some(eof) = e.downcast_ref::<lox_interpreter::lex::Eof>() {
+                        eprintln!("[line {}] Error: Unexpected end of file", eof.line());
+                        eprintln!("{e:?}");
+
+                        std::process::exit(65);
+                    };
+                    return Err(e);
+                }
+            };
+            println!("{expr}");
+        }
+        Commands::ParseFile { filename } => {
             let file_contents = fs::read_to_string(&filename)
                 .into_diagnostic()
                 .wrap_err_with(|| format!("reading `{}` failed", filename.display()))?;
