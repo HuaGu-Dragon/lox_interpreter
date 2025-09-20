@@ -20,6 +20,7 @@ enum Commands {
     Tokenize { filename: PathBuf },
     Parse { expr: String },
     ParseFile { filename: PathBuf },
+    Eval { expr: String },
 }
 
 fn main() -> miette::Result<()> {
@@ -98,6 +99,23 @@ fn main() -> miette::Result<()> {
                 };
                 println!("{statement}");
             }
+        }
+        Commands::Eval { expr } => {
+            let parser = lox_interpreter::Parser::new(None, &expr);
+            let expr = match parser.parse_expr() {
+                Ok(expr) => expr,
+                Err(e) => {
+                    if let Some(eof) = e.downcast_ref::<lox_interpreter::lex::Eof>() {
+                        eprintln!("[line {}] Error: Unexpected end of file", eof.line());
+                        eprintln!("{e:?}");
+
+                        std::process::exit(65);
+                    };
+                    return Err(e);
+                }
+            };
+            let res = lox_interpreter::eval::eval_expr(expr)?;
+            println!("{res}");
         }
     }
     Ok(())
