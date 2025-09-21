@@ -26,15 +26,13 @@ pub struct Environment<'de> {
 }
 
 impl<'de> Environment<'de> {
-    // TODO: support the father frame
     pub fn get(&self, name: &str) -> Option<&Value<'de>> {
         self.stack.iter().find_map(|frame| frame.get(name))
     }
 
     // TODO: support the father frame
     pub fn set(&mut self, name: Cow<'de, str>, value: Value<'de>) -> Result<(), miette::Error> {
-        let frame = self.stack.current_mut();
-        if let Some(entry) = frame.and_then(|frame| frame.get_mut(&name)) {
+        if let Some(entry) = self.stack.iter_mut().find_map(|frame| frame.get_mut(&name)) {
             *entry = value;
             Ok(())
         } else {

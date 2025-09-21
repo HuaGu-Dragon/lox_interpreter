@@ -6,7 +6,12 @@ if (a == 1) {
         print b;
         b = 3;
         print a;
+        a = 10;
         print b;
+    }
+    {
+        var a = 2;
+        print a;
     }
     print a;
     print "1==1";
