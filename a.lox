@@ -1,4 +1,4 @@
-if (a.foo(true, 42, "hello banana" + " also")) {
+if (a.foo(true, 42, "hello banana" + " also")()) {
     print a + b * c / d;
     var a = b;
 } else {

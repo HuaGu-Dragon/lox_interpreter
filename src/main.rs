@@ -101,8 +101,8 @@ fn main() -> miette::Result<()> {
             }
         }
         Commands::Eval { expr } => {
-            let parser = lox_interpreter::Parser::new(None, &expr);
-            let expr = match parser.parse_expr() {
+            let mut interpreter = lox_interpreter::eval::Interpreter::new(None, &expr);
+            let value = match interpreter.eval_expr() {
                 Ok(expr) => expr,
                 Err(e) => {
                     if let Some(eof) = e.downcast_ref::<lox_interpreter::lex::Eof>() {
@@ -114,8 +114,7 @@ fn main() -> miette::Result<()> {
                     return Err(e);
                 }
             };
-            let res = lox_interpreter::eval::eval_expr(expr)?;
-            println!("{res}");
+            println!("{value}");
         }
     }
     Ok(())
