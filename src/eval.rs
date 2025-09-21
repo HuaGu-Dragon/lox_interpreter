@@ -114,10 +114,18 @@ impl<'de> Interpreter<'de> {
                 Atom::Ident(name, byte) => {
                     let Some(value) = self.environment.get(name) else {
                         // TODO: Handle unwrap
-                        let stack = self.environment.stack.current().unwrap();
-                        let key = stack.keys().next().unwrap();
+                        let message = if let Some(key) = self
+                            .environment
+                            .stack
+                            .current()
+                            .and_then(|map| map.keys().next())
+                        {
+                            format!("change variable `{name}` to variable `{key}` ?")
+                        } else {
+                            format!("define the variable `{name}` first ?")
+                        };
                         return Err(miette!(
-                            help = format!("change variable `{name}` to variable `{key}` ?"),
+                            help = message,
                             labels = vec![LabeledSpan::at(byte - name.len()..byte, "here",)],
                             "unexpected variable name"
                         )
