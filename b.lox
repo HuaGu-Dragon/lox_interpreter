@@ -1,6 +1,10 @@
 print "Hello World!";
 var a = 1;
 if (a == 1) {
+    {
+        var b = 2;
+    }
+    print b;
     print "1==1";
 } else {
     print "1!=1";

@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
-use miette::miette;
+use miette::{LabeledSpan, miette};
 
 use crate::{
     Parser,
@@ -113,8 +113,15 @@ impl<'de> Interpreter<'de> {
                 Atom::Boolean(value) => Value::Bool(value),
                 Atom::Ident(name) => {
                     let Some(value) = self.environment.get(name) else {
-                        // TODO: beautiful error
-                        panic!("")
+                        return Err(miette!(
+                            help = "correct variable name",
+                            labels = vec![LabeledSpan::at(
+                                self.parser.lexer.byte - name.len()..self.parser.lexer.byte,
+                                "here",
+                            )],
+                            "unexpected variable name"
+                        )
+                        .with_source_code(self.parser.whole.to_string()));
                     };
                     // TODO: is a way to remove clone?
                     value.clone()
@@ -232,9 +239,11 @@ impl<'de> Interpreter<'de> {
     fn eval_statement_tree(&mut self, statement: StatementTree<'de>) -> Result<(), miette::Error> {
         match statement {
             StatementTree::Block(statement_trees) => {
+                self.environment.stack.push();
                 for statement in statement_trees {
                     self.eval_statement_tree(statement)?;
                 }
+                self.environment.stack.pop();
             }
             StatementTree::Expression(token_tree) => {
                 self.eval_expression(token_tree)?;

@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct Parser<'de> {
-    whole: &'de str,
+    pub whole: &'de str,
     pub lexer: Lexer<'de>,
 }
 
@@ -186,10 +186,18 @@ impl<'de> Parser<'de> {
                     | TokenKind::While
                     | TokenKind::Print
                     | TokenKind::Return
-                    | TokenKind::Semicolon,
+                    | TokenKind::Semicolon
+                    | TokenKind::LeftBrace,
                 ..
             }))
         ) {
+            if let Some(Ok(Token {
+                kind: TokenKind::LeftBrace,
+                ..
+            })) = self.lexer.peek()
+            {
+                return self.parse_block();
+            }
             let statement = match self.lexer.next() {
                 Some(Ok(token)) => token,
                 None => {
@@ -457,6 +465,7 @@ impl<'de> Parser<'de> {
                         else_branch: otherwise.map(Box::new),
                     });
                 }
+
                 token => {
                     return Err(miette::miette! {
                         labels = vec![
