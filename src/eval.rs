@@ -28,7 +28,7 @@ pub struct Environment<'de> {
 impl<'de> Environment<'de> {
     // TODO: support the father frame
     pub fn get(&self, name: &str) -> Option<&Value<'de>> {
-        self.stack.current().and_then(|frame| frame.get(name))
+        self.stack.iter().find_map(|frame| frame.get(name))
     }
 
     // TODO: support the father frame
