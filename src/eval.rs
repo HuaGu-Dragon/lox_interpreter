@@ -1,8 +1,10 @@
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+use miette::miette;
 
 use crate::{
     Parser,
-    parse::{Atom, StatementTree, TokenTree},
+    parse::{Atom, Op, StatementTree, TokenTree},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +17,56 @@ pub enum Value<'de> {
 
 pub struct Interpreter<'de> {
     parser: Parser<'de>,
+    environment: Environment<'de>,
+}
+
+#[derive(Debug, Default)]
+pub struct Environment<'de> {
+    stack: Stack<'de>,
+}
+
+impl<'de> Environment<'de> {
+    pub fn get(&self, name: &str) -> Option<&Value<'de>> {
+        self.stack.current().and_then(|frame| frame.get(name))
+    }
+    pub fn define(&mut self, name: Cow<'de, str>, value: Value<'de>) -> Result<(), miette::Error> {
+        self.stack
+            .current_mut()
+            .ok_or_else(|| miette!("No current stack frame"))?
+            .insert(name, value);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Stack<'de> {
+    values: Vec<HashMap<Cow<'de, str>, Value<'de>>>,
+}
+
+impl<'de> Stack<'de> {
+    pub fn push(&mut self) {
+        self.values.push(HashMap::new());
+    }
+
+    pub fn pop(&mut self) {
+        self.values.pop();
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &HashMap<Cow<'de, str>, Value<'de>>> {
+        self.values.iter().rev()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HashMap<Cow<'de, str>, Value<'de>>> {
+        self.values.iter_mut().rev()
+    }
+
+    pub fn current(&self) -> Option<&HashMap<Cow<'de, str>, Value<'de>>> {
+        self.iter().next()
+    }
+
+    pub fn current_mut(&mut self) -> Option<&mut HashMap<Cow<'de, str>, Value<'de>>> {
+        self.iter_mut().next()
+    }
 }
 
 impl<'de> Iterator for Interpreter<'de> {
@@ -33,34 +85,55 @@ impl<'de> Interpreter<'de> {
     pub fn new(filename: Option<&'de str>, whole: &'de str) -> Self {
         Self {
             parser: Parser::new(filename, whole),
+            environment: Environment::default(),
         }
     }
 
     pub fn eval_expr(&mut self) -> Result<Value<'de>, miette::Error> {
         let expr = self.parser.parse_expression_within(0)?;
-        Self::eval_expression(expr)
+        self.eval_expression(expr)
     }
 
     pub fn eval_statement(&mut self) -> Result<(), miette::Error> {
         let statement = self.parser.parse_statement_within()?;
-        Self::eval_statement_tree(statement)
+        self.eval_statement_tree(statement)
     }
 
-    fn eval_expression(expr: TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
+    fn eval_expression(&mut self, expr: TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
         Ok(match expr {
             TokenTree::Atom(atom) => match atom {
                 Atom::String(value) => Value::Str(Cow::Borrowed(value)),
                 Atom::Number(value) => Value::Number(value),
                 Atom::Nil => Value::Nil,
                 Atom::Boolean(value) => Value::Bool(value),
-                Atom::Ident(_value) => todo!(), // TODO: Handle identifiers
-                Atom::Super => todo!(),         // TODO: Handle super
-                Atom::This => todo!(),          // TODO: Handle this
+                Atom::Ident(name) => {
+                    let Some(value) = self.environment.get(name) else {
+                        // TODO: beautiful error
+                        panic!("")
+                    };
+                    // TODO: is a way to remove clone?
+                    value.clone()
+                }
+                Atom::Super => todo!(), // TODO: Handle super
+                Atom::This => todo!(),  // TODO: Handle this
             },
+            TokenTree::Cons(Op::Var, token_trees) => {
+                // TODO: Handle nil declaration
+                assert!(token_trees.len() == 2);
+                let mut trees = token_trees.into_iter();
+                let Some(TokenTree::Atom(Atom::Ident(name))) = trees.next() else {
+                    // TODO: beautiful Handle
+                    panic!("")
+                };
+                let value = self.eval_expression(trees.next().unwrap())?;
+
+                self.environment.define(Cow::Borrowed(name), value)?;
+                Value::Nil
+            }
             TokenTree::Cons(op, token_trees) => {
                 let values = token_trees
                     .into_iter()
-                    .map(Self::eval_expression)
+                    .map(|tree| self.eval_expression(tree))
                     .collect::<Result<Vec<_>, _>>()?;
                 // TODO: Handle error with source location
                 match op {
@@ -142,7 +215,7 @@ impl<'de> Interpreter<'de> {
                     },
                     crate::parse::Op::Return => todo!(),
                     crate::parse::Op::Field => todo!(),
-                    crate::parse::Op::Var => todo!(),
+                    crate::parse::Op::Var => unreachable!(),
                     crate::parse::Op::While => todo!(),
                     crate::parse::Op::Call => todo!(),
                 }
@@ -151,15 +224,15 @@ impl<'de> Interpreter<'de> {
         })
     }
 
-    fn eval_statement_tree(statement: StatementTree<'de>) -> Result<(), miette::Error> {
+    fn eval_statement_tree(&mut self, statement: StatementTree<'de>) -> Result<(), miette::Error> {
         match statement {
             StatementTree::Block(statement_trees) => {
                 for statement in statement_trees {
-                    Self::eval_statement_tree(statement)?;
+                    self.eval_statement_tree(statement)?;
                 }
             }
             StatementTree::Expression(token_tree) => {
-                Self::eval_expression(token_tree)?;
+                self.eval_expression(token_tree)?;
             }
             StatementTree::Fun { name, params, body } => todo!(),
             StatementTree::If {
@@ -167,12 +240,12 @@ impl<'de> Interpreter<'de> {
                 then_branch,
                 else_branch,
             } => {
-                let condition_value = Self::eval_expression(*condition)?;
+                let condition_value = self.eval_expression(*condition)?;
                 match condition_value {
-                    Value::Bool(true) => Self::eval_statement_tree(*then_branch)?,
+                    Value::Bool(true) => self.eval_statement_tree(*then_branch)?,
                     Value::Bool(false) => {
                         if let Some(else_branch) = else_branch {
-                            Self::eval_statement_tree(*else_branch)?
+                            self.eval_statement_tree(*else_branch)?
                         }
                     }
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),

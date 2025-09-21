@@ -339,6 +339,8 @@ impl<'de> Parser<'de> {
 
                     let ident = TokenTree::Atom(Atom::Ident(token.literal));
 
+                    // TODO: Handle nil Var declaration
+
                     self.lexer
                         .expect(TokenKind::Equal, "Expected '=' after variable name")
                         .wrap_err("in variable assignment")?;
