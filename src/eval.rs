@@ -109,21 +109,21 @@ impl<'de> Interpreter<'de> {
 
     pub fn eval_expr(&mut self) -> Result<Value<'de>, miette::Error> {
         let expr = self.parser.parse_expression_within(0)?;
-        self.eval_expression(expr)
+        self.eval_expression(&expr)
     }
 
     pub fn eval_statement(&mut self) -> Result<(), miette::Error> {
         let statement = self.parser.parse_statement_within()?;
-        self.eval_statement_tree(statement)
+        self.eval_statement_tree(&statement)
     }
 
-    fn eval_expression(&mut self, expr: TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
+    fn eval_expression(&mut self, expr: &TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
         Ok(match expr {
             TokenTree::Atom(atom) => match atom {
                 Atom::String(value) => Value::Str(Cow::Borrowed(value)),
-                Atom::Number(value) => Value::Number(value),
+                Atom::Number(value) => Value::Number(*value),
                 Atom::Nil => Value::Nil,
-                Atom::Boolean(value) => Value::Bool(value),
+                Atom::Boolean(value) => Value::Bool(*value),
                 Atom::Ident(name, byte) => {
                     let Some(value) = self.environment.get(name) else {
                         // TODO: Handle unwrap
@@ -139,7 +139,7 @@ impl<'de> Interpreter<'de> {
                         };
                         return Err(miette!(
                             help = message,
-                            labels = vec![LabeledSpan::at(byte - name.len()..byte, "here",)],
+                            labels = vec![LabeledSpan::at(byte - name.len()..*byte, "here",)],
                             "unexpected variable name"
                         )
                         .with_source_code(self.parser.whole.to_string()));
@@ -265,7 +265,7 @@ impl<'de> Interpreter<'de> {
         })
     }
 
-    fn eval_statement_tree(&mut self, statement: StatementTree<'de>) -> Result<(), miette::Error> {
+    fn eval_statement_tree(&mut self, statement: &StatementTree<'de>) -> Result<(), miette::Error> {
         match statement {
             StatementTree::Block(statement_trees) => {
                 self.environment.stack.push();
@@ -275,7 +275,7 @@ impl<'de> Interpreter<'de> {
                 self.environment.stack.pop();
             }
             StatementTree::Expression(token_tree) => {
-                self.eval_expression(token_tree)?;
+                self.eval_expression(&token_tree)?;
             }
             StatementTree::Fun { name, params, body } => todo!(),
             StatementTree::If {
@@ -283,12 +283,12 @@ impl<'de> Interpreter<'de> {
                 then_branch,
                 else_branch,
             } => {
-                let condition_value = self.eval_expression(*condition)?;
+                let condition_value = self.eval_expression(condition.as_ref())?;
                 match condition_value {
-                    Value::Bool(true) => self.eval_statement_tree(*then_branch)?,
+                    Value::Bool(true) => self.eval_statement_tree(then_branch)?,
                     Value::Bool(false) => {
                         if let Some(else_branch) = else_branch {
-                            self.eval_statement_tree(*else_branch)?
+                            self.eval_statement_tree(else_branch)?
                         }
                     }
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
@@ -301,11 +301,12 @@ impl<'de> Interpreter<'de> {
                 body,
             } => todo!(),
             StatementTree::While { condition, body } => {
-                let condition_value = self.eval_expression(*condition)?;
-                match condition_value {
-                    Value::Bool(true) => self.eval_statement_tree(*body)?,
-                    Value::Bool(false) => todo!(),
+                while match self.eval_expression(condition.as_ref())? {
+                    Value::Bool(true) => true,
+                    Value::Bool(false) => false,
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
+                } {
+                    self.eval_statement_tree(body.as_ref())?;
                 }
             }
             StatementTree::Class { name, father, body } => todo!(),
