@@ -151,7 +151,7 @@ impl<'de> Interpreter<'de> {
             TokenTree::Cons(Op::Var, token_trees) => {
                 // TODO: Handle nil declaration
                 assert!(token_trees.len() == 2);
-                let mut trees = token_trees.into_iter();
+                let mut trees = token_trees.iter();
                 let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
                     // TODO: beautiful Handle
                     panic!("")
@@ -163,7 +163,7 @@ impl<'de> Interpreter<'de> {
             }
             TokenTree::Cons(Op::Equal, token_trees) => {
                 assert!(token_trees.len() == 2);
-                let mut trees = token_trees.into_iter();
+                let mut trees = token_trees.iter();
                 let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
                     // TODO: beautiful Handle
                     panic!("")
@@ -174,7 +174,7 @@ impl<'de> Interpreter<'de> {
             }
             TokenTree::Cons(op, token_trees) => {
                 let values = token_trees
-                    .into_iter()
+                    .iter()
                     .map(|tree| self.eval_expression(tree))
                     .collect::<Result<Vec<_>, _>>()?;
                 // TODO: Handle error with source location
@@ -273,7 +273,7 @@ impl<'de> Interpreter<'de> {
                 self.environment.stack.pop();
             }
             StatementTree::Expression(token_tree) => {
-                self.eval_expression(&token_tree)?;
+                self.eval_expression(token_tree)?;
             }
             StatementTree::Fun { name, params, body } => todo!(),
             StatementTree::If {
