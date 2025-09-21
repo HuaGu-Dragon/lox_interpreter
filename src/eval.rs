@@ -20,7 +20,7 @@ pub struct Interpreter<'de> {
     environment: Environment<'de>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Environment<'de> {
     stack: Stack<'de>,
 }
@@ -38,7 +38,7 @@ impl<'de> Environment<'de> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Stack<'de> {
     values: Vec<HashMap<Cow<'de, str>, Value<'de>>>,
 }
@@ -85,7 +85,12 @@ impl<'de> Interpreter<'de> {
     pub fn new(filename: Option<&'de str>, whole: &'de str) -> Self {
         Self {
             parser: Parser::new(filename, whole),
-            environment: Environment::default(),
+            // TODO: handle this ugly code
+            environment: Environment {
+                stack: Stack {
+                    values: vec![HashMap::new()],
+                },
+            },
         }
     }
 
