@@ -43,7 +43,7 @@ impl<'de> Interpreter<'de> {
 
     pub fn eval_statement(&mut self) -> Result<(), miette::Error> {
         let statement = self.parser.parse_statement_within()?;
-        todo!()
+        Self::eval_statement_tree(statement)
     }
 
     fn eval_expression(expr: TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
