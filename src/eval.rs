@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Display};
 
 use crate::{
     Parser,
-    parse::{Atom, TokenTree},
+    parse::{Atom, StatementTree, TokenTree},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +17,17 @@ pub struct Interpreter<'de> {
     parser: Parser<'de>,
 }
 
+impl<'de> Iterator for Interpreter<'de> {
+    type Item = Result<(), miette::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.eval_statement() {
+            Ok(()) => Some(Ok(())),
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
 impl<'de> Interpreter<'de> {
     pub fn new(filename: Option<&'de str>, whole: &'de str) -> Self {
         Self {
@@ -27,6 +38,11 @@ impl<'de> Interpreter<'de> {
     pub fn eval_expr(&mut self) -> Result<Value<'de>, miette::Error> {
         let expr = self.parser.parse_expression_within(0)?;
         Self::eval_expression(expr)
+    }
+
+    pub fn eval_statement(&mut self) -> Result<(), miette::Error> {
+        let statement = self.parser.parse_statement_within()?;
+        todo!()
     }
 
     fn eval_expression(expr: TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
@@ -116,7 +132,13 @@ impl<'de> Interpreter<'de> {
                     crate::parse::Op::If => todo!(),
                     crate::parse::Op::For => todo!(),
                     crate::parse::Op::Fun => todo!(),
-                    crate::parse::Op::Print => todo!(),
+                    crate::parse::Op::Print => match values.as_slice() {
+                        [value] => {
+                            println!("{value}");
+                            Value::Nil
+                        }
+                        _ => return Err(miette::miette!("Invalid print operation")),
+                    },
                     crate::parse::Op::Return => todo!(),
                     crate::parse::Op::Field => todo!(),
                     crate::parse::Op::Var => todo!(),
@@ -126,6 +148,45 @@ impl<'de> Interpreter<'de> {
             }
             TokenTree::Call { callee, arguments } => todo!(),
         })
+    }
+
+    fn eval_statement_tree(statement: StatementTree<'de>) -> Result<(), miette::Error> {
+        match statement {
+            StatementTree::Block(statement_trees) => {
+                for statement in statement_trees {
+                    Self::eval_statement_tree(statement)?;
+                }
+            }
+            StatementTree::Expression(token_tree) => {
+                Self::eval_expression(token_tree)?;
+            }
+            StatementTree::Fun { name, params, body } => todo!(),
+            StatementTree::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition_value = Self::eval_expression(*condition)?;
+                match condition_value {
+                    Value::Bool(true) => Self::eval_statement_tree(*then_branch)?,
+                    Value::Bool(false) => {
+                        if let Some(else_branch) = else_branch {
+                            Self::eval_statement_tree(*else_branch)?
+                        }
+                    }
+                    _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
+                }
+            }
+            StatementTree::For {
+                init,
+                condition,
+                increment,
+                body,
+            } => todo!(),
+            StatementTree::While { condition, body } => todo!(),
+            StatementTree::Class { name, father, body } => todo!(),
+        };
+        Ok(())
     }
 }
 
