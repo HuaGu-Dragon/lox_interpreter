@@ -111,14 +111,14 @@ impl<'de> Interpreter<'de> {
                 Atom::Number(value) => Value::Number(value),
                 Atom::Nil => Value::Nil,
                 Atom::Boolean(value) => Value::Bool(value),
-                Atom::Ident(name) => {
+                Atom::Ident(name, byte) => {
                     let Some(value) = self.environment.get(name) else {
+                        // TODO: Handle unwrap
+                        let stack = self.environment.stack.current().unwrap();
+                        let key = stack.keys().next().unwrap();
                         return Err(miette!(
-                            help = "correct variable name",
-                            labels = vec![LabeledSpan::at(
-                                self.parser.lexer.byte - name.len()..self.parser.lexer.byte,
-                                "here",
-                            )],
+                            help = format!("change variable `{name}` to variable `{key}` ?"),
+                            labels = vec![LabeledSpan::at(byte - name.len()..byte, "here",)],
                             "unexpected variable name"
                         )
                         .with_source_code(self.parser.whole.to_string()));
@@ -133,7 +133,7 @@ impl<'de> Interpreter<'de> {
                 // TODO: Handle nil declaration
                 assert!(token_trees.len() == 2);
                 let mut trees = token_trees.into_iter();
-                let Some(TokenTree::Atom(Atom::Ident(name))) = trees.next() else {
+                let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
                     // TODO: beautiful Handle
                     panic!("")
                 };

@@ -1,6 +1,7 @@
 print "Hello World!";
 var a = 1;
 if (a == 1) {
+    var c = "123";
     {
         var b = 2;
     }

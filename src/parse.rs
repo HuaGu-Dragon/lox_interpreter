@@ -60,7 +60,7 @@ pub enum Atom<'de> {
     Number(f64),
     Nil,
     Boolean(bool),
-    Ident(&'de str),
+    Ident(&'de str, usize),
     Super,
     This,
 }
@@ -322,7 +322,7 @@ impl<'de> Parser<'de> {
                         .lexer
                         .expect(TokenKind::Ident, "Expected identifier")
                         .wrap_err("in class name")?;
-                    let _ident = TokenTree::Atom(Atom::Ident(token.literal));
+                    let _ident = TokenTree::Atom(Atom::Ident(token.literal, self.lexer.byte));
 
                     // let class_block = self.parse_class_body().wrap_err("in class body")?;
 
@@ -345,7 +345,7 @@ impl<'de> Parser<'de> {
                         .expect(TokenKind::Ident, "Expected identifier")
                         .wrap_err("in variable assignment")?;
 
-                    let ident = TokenTree::Atom(Atom::Ident(token.literal));
+                    let ident = TokenTree::Atom(Atom::Ident(token.literal, self.lexer.byte));
 
                     // TODO: Handle nil Var declaration
 
@@ -369,7 +369,7 @@ impl<'de> Parser<'de> {
                         .expect(TokenKind::Ident, "Expected identifier")
                         .wrap_err("in name declaration of function")?;
                     let name = token.literal;
-                    let ident = Atom::Ident(token.literal);
+                    let ident = Atom::Ident(token.literal, self.lexer.byte);
 
                     self.lexer
                         .expect(TokenKind::LeftParen, "Expected '(' after function name")
@@ -539,7 +539,7 @@ impl<'de> Parser<'de> {
             Token {
                 kind: TokenKind::Ident,
                 literal,
-            } => TokenTree::Atom(Atom::Ident(literal)),
+            } => TokenTree::Atom(Atom::Ident(literal, self.lexer.byte)),
             Token {
                 kind: TokenKind::Super,
                 ..
@@ -755,7 +755,7 @@ impl Display for Atom<'_> {
             Atom::Number(n) => write!(f, "{n}"),
             Atom::Nil => write!(f, "nil"),
             Atom::Boolean(b) => write!(f, "{b:?}"),
-            Atom::Ident(i) => write!(f, "{i}"),
+            Atom::Ident(i, _) => write!(f, "{i}"),
             Atom::Super => write!(f, "super"),
             Atom::This => write!(f, "this"),
         }
