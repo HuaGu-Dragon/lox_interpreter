@@ -26,9 +26,22 @@ pub struct Environment<'de> {
 }
 
 impl<'de> Environment<'de> {
+    // TODO: support the father frame
     pub fn get(&self, name: &str) -> Option<&Value<'de>> {
         self.stack.current().and_then(|frame| frame.get(name))
     }
+
+    // TODO: support the father frame
+    pub fn set(&mut self, name: Cow<'de, str>, value: Value<'de>) -> Result<(), miette::Error> {
+        let frame = self.stack.current_mut();
+        if let Some(entry) = frame.and_then(|frame| frame.get_mut(&name)) {
+            *entry = value;
+            Ok(())
+        } else {
+            Err(miette!("Variable not found"))
+        }
+    }
+
     pub fn define(&mut self, name: Cow<'de, str>, value: Value<'de>) -> Result<(), miette::Error> {
         self.stack
             .current_mut()
@@ -150,6 +163,17 @@ impl<'de> Interpreter<'de> {
                 self.environment.define(Cow::Borrowed(name), value)?;
                 Value::Nil
             }
+            TokenTree::Cons(Op::Equal, token_trees) => {
+                assert!(token_trees.len() == 2);
+                let mut trees = token_trees.into_iter();
+                let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
+                    // TODO: beautiful Handle
+                    panic!("")
+                };
+                let value = self.eval_expression(trees.next().unwrap())?;
+                self.environment.set(Cow::Borrowed(name), value)?;
+                Value::Nil
+            }
             TokenTree::Cons(op, token_trees) => {
                 let values = token_trees
                     .into_iter()
@@ -210,10 +234,7 @@ impl<'de> Interpreter<'de> {
                         [Value::Bool(value)] => Value::Bool(!value),
                         _ => return Err(miette::miette!("Invalid logical negation operation")),
                     },
-                    crate::parse::Op::Equal => match values.as_slice() {
-                        [lhs, rhs] => Value::Bool(lhs == rhs),
-                        _ => return Err(miette::miette!("Invalid equality operation")),
-                    },
+                    crate::parse::Op::Equal => unreachable!(),
                     crate::parse::Op::And => match values.as_slice() {
                         [Value::Bool(lhs), Value::Bool(rhs)] => Value::Bool(*lhs && *rhs),
                         _ => return Err(miette::miette!("Invalid logical AND operation")),
@@ -279,7 +300,14 @@ impl<'de> Interpreter<'de> {
                 increment,
                 body,
             } => todo!(),
-            StatementTree::While { condition, body } => todo!(),
+            StatementTree::While { condition, body } => {
+                let condition_value = self.eval_expression(*condition)?;
+                match condition_value {
+                    Value::Bool(true) => self.eval_statement_tree(*body)?,
+                    Value::Bool(false) => todo!(),
+                    _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
+                }
+            }
             StatementTree::Class { name, father, body } => todo!(),
         };
         Ok(())
