@@ -21,6 +21,7 @@ enum Commands {
     Parse { expr: String },
     ParseFile { filename: PathBuf },
     Eval { expr: String },
+    Run { filename: PathBuf },
 }
 
 fn main() -> miette::Result<()> {
@@ -115,6 +116,25 @@ fn main() -> miette::Result<()> {
                 }
             };
             println!("{value}");
+        }
+        Commands::Run { filename } => {
+            let file_contents = fs::read_to_string(&filename)
+                .into_diagnostic()
+                .wrap_err_with(|| format!("reading `{}` failed", filename.display()))?;
+
+            let mut interpreter =
+                lox_interpreter::eval::Interpreter::new(filename.to_str(), &file_contents);
+            for result in &mut interpreter {
+                if let Err(e) = result {
+                    if let Some(eof) = e.downcast_ref::<lox_interpreter::lex::Eof>() {
+                        eprintln!("[line {}] Error: Unexpected end of file", eof.line());
+                        eprintln!("{e:?}");
+
+                        std::process::exit(65);
+                    };
+                    return Err(e);
+                }
+            }
         }
     }
     Ok(())

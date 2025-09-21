@@ -11,7 +11,7 @@ use crate::{
 
 pub struct Parser<'de> {
     whole: &'de str,
-    lexer: Lexer<'de>,
+    pub lexer: Lexer<'de>,
 }
 
 pub enum StatementTree<'de> {

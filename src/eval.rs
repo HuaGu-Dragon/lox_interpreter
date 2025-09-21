@@ -21,9 +21,10 @@ impl<'de> Iterator for Interpreter<'de> {
     type Item = Result<(), miette::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.eval_statement() {
-            Ok(()) => Some(Ok(())),
-            Err(e) => Some(Err(e)),
+        if self.parser.lexer.peek().is_none() {
+            None
+        } else {
+            Some(self.eval_statement())
         }
     }
 }
