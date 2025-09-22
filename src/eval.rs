@@ -7,12 +7,26 @@ use crate::{
     parse::{Atom, Op, StatementTree, TokenTree},
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value<'de> {
     Number(f64),
     Bool(bool),
     Str(Cow<'de, str>),
+    Fun(Function<'de>),
     Nil,
+}
+
+#[derive(Debug, Clone)]
+pub enum Function<'de> {
+    Native {
+        name: Cow<'de, str>,
+        params: Vec<Cow<'de, str>>,
+        body: fn(&[Value<'de>]) -> Result<Value<'de>, miette::Error>,
+    },
+    UserDefined {
+        params: Vec<Cow<'de, str>>,
+        body: Box<StatementTree<'de>>,
+    },
 }
 
 pub struct Interpreter<'de> {
@@ -124,7 +138,6 @@ impl<'de> Interpreter<'de> {
                 Atom::Boolean(value) => Value::Bool(*value),
                 Atom::Ident(name, byte) => {
                     let Some(value) = self.environment.get(name) else {
-                        // TODO: Handle unwrap
                         let message = if let Some(key) = self
                             .environment
                             .stack
@@ -197,11 +210,17 @@ impl<'de> Interpreter<'de> {
                         _ => return Err(miette::miette!("Invalid multiplication operation")),
                     },
                     crate::parse::Op::BangEqual => match values.as_slice() {
-                        [lhs, rhs] => Value::Bool(lhs != rhs),
+                        [Value::Str(lhs), Value::Str(rhs)] => Value::Bool(lhs != rhs),
+                        [Value::Bool(lhs), Value::Bool(rhs)] => Value::Bool(lhs != rhs),
+                        [Value::Number(lhs), Value::Number(rhs)] => Value::Bool(lhs != rhs),
+                        [Value::Nil, Value::Nil] => Value::Bool(false),
                         _ => return Err(miette::miette!("Invalid inequality operation")),
                     },
                     crate::parse::Op::EqualEqual => match values.as_slice() {
-                        [lhs, rhs] => Value::Bool(lhs == rhs),
+                        [Value::Str(lhs), Value::Str(rhs)] => Value::Bool(lhs == rhs),
+                        [Value::Bool(lhs), Value::Bool(rhs)] => Value::Bool(lhs == rhs),
+                        [Value::Number(lhs), Value::Number(rhs)] => Value::Bool(lhs == rhs),
+                        [Value::Nil, Value::Nil] => Value::Bool(true),
                         _ => return Err(miette::miette!("Invalid equality operation")),
                     },
                     crate::parse::Op::GreaterEqual => match values.as_slice() {
@@ -262,7 +281,35 @@ impl<'de> Interpreter<'de> {
                     crate::parse::Op::Call => todo!(),
                 }
             }
-            TokenTree::Call { callee, arguments } => todo!(),
+            TokenTree::Call { callee, arguments } => {
+                let callee_value = self.eval_expression(callee)?;
+                let argument_values = arguments
+                    .iter()
+                    .map(|arg| self.eval_expression(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let Value::Fun(fun) = callee_value else {
+                    panic!("Can only call functions");
+                };
+                match fun {
+                    Function::Native { name, params, body } => todo!(),
+                    Function::UserDefined { params, body } => {
+                        if params.len() != argument_values.len() {
+                            return Err(miette::miette!("Argument count mismatch"));
+                        }
+                        self.environment.stack.push();
+
+                        for (param, arg) in params.into_iter().zip(argument_values.into_iter()) {
+                            self.environment.define(param, arg)?;
+                        }
+
+                        self.eval_statement_tree(body.as_ref())?;
+
+                        self.environment.stack.pop();
+                    }
+                }
+
+                todo!()
+            }
         })
     }
 
@@ -278,7 +325,19 @@ impl<'de> Interpreter<'de> {
             StatementTree::Expression(token_tree) => {
                 self.eval_expression(token_tree)?;
             }
-            StatementTree::Fun { name, params, body } => todo!(),
+            StatementTree::Fun { name, params, body } => {
+                let function = Value::Fun(Function::UserDefined {
+                    params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
+                    body: Box::new((**body).clone()),
+                });
+                self.environment.define(
+                    Cow::Borrowed(match name {
+                        Atom::Ident(name, _) => name,
+                        _ => panic!("Function name must be an identifier"),
+                    }),
+                    function,
+                )?;
+            }
             StatementTree::If {
                 condition,
                 then_branch,
@@ -337,6 +396,7 @@ impl Display for Value<'_> {
             Value::Number(n) => write!(f, "{n}"),
             Value::Bool(b) => write!(f, "{b}"),
             Value::Str(s) => write!(f, "{s}"),
+            Value::Fun(_) => write!(f, "<fun>"),
             Value::Nil => write!(f, "nil"),
         }
     }

@@ -14,6 +14,7 @@ pub struct Parser<'de> {
     pub lexer: Lexer<'de>,
 }
 
+#[derive(Debug, Clone)]
 pub enum StatementTree<'de> {
     Block(Vec<StatementTree<'de>>),
     Expression(TokenTree<'de>),
