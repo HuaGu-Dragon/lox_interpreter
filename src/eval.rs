@@ -187,6 +187,9 @@ impl<'de> Interpreter<'de> {
                     crate::parse::Op::Plus => match values.as_slice() {
                         [Value::Number(num)] => Value::Number(*num),
                         [Value::Number(lhs), Value::Number(rhs)] => Value::Number(lhs + rhs),
+                        [Value::Str(lhs), Value::Str(rhs)] => {
+                            Value::Str(Cow::Owned(format!("{lhs}{rhs}")))
+                        }
                         _ => return Err(miette::miette!("Invalid unary plus operation")),
                     },
                     crate::parse::Op::Star => match values.as_slice() {
