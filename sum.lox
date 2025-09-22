@@ -6,3 +6,10 @@ while (i <= 100) {
     i = i + 1;
 }
 print sum;
+
+var for_sum = 0;
+for (var i = 1; i <= 100; i = i + 1) {
+    for_sum = for_sum + i;
+}
+
+print for_sum;
