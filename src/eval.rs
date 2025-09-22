@@ -255,7 +255,7 @@ impl<'de> Interpreter<'de> {
                     crate::parse::Op::Return => todo!(),
                     crate::parse::Op::Field => todo!(),
                     crate::parse::Op::Var => unreachable!(),
-                    crate::parse::Op::While => todo!(),
+                    crate::parse::Op::While => unreachable!(),
                     crate::parse::Op::Call => todo!(),
                 }
             }
@@ -297,7 +297,22 @@ impl<'de> Interpreter<'de> {
                 condition,
                 increment,
                 body,
-            } => todo!(),
+            } => {
+                self.environment.stack.push();
+
+                self.eval_statement_tree(init.as_ref())?;
+
+                while match self.eval_expression(condition)? {
+                    Value::Bool(true) => true,
+                    Value::Bool(false) => false,
+                    _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
+                } {
+                    self.eval_statement_tree(body.as_ref())?;
+                    self.eval_expression(increment)?;
+                }
+
+                self.environment.stack.pop();
+            }
             StatementTree::While { condition, body } => {
                 while match self.eval_expression(condition.as_ref())? {
                     Value::Bool(true) => true,
