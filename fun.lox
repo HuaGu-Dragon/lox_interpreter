@@ -1,0 +1,9 @@
+var c =  100;
+
+fun add(a, b) {
+    print a + b + c;
+}
+
+var x = 10;
+var y = 20;
+add(x, y);

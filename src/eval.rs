@@ -308,7 +308,7 @@ impl<'de> Interpreter<'de> {
                     }
                 }
 
-                todo!()
+                Value::Nil
             }
         })
     }
