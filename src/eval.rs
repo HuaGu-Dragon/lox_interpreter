@@ -13,6 +13,7 @@ pub enum Value<'de> {
     Bool(bool),
     Str(Cow<'de, str>),
     Fun(Function<'de>),
+    Return(Box<Value<'de>>),
     Nil,
 }
 
@@ -37,6 +38,11 @@ pub struct Interpreter<'de> {
 #[derive(Debug)]
 pub struct Environment<'de> {
     stack: Stack<'de>,
+}
+
+pub enum Terminate<'de> {
+    Return(Value<'de>),
+    End,
 }
 
 impl<'de> Environment<'de> {
@@ -126,7 +132,11 @@ impl<'de> Interpreter<'de> {
 
     pub fn eval_statement(&mut self) -> Result<(), miette::Error> {
         let statement = self.parser.parse_statement_within()?;
-        self.eval_statement_tree(&statement)
+        let terminate = self.eval_statement_tree(&statement)?;
+        match terminate {
+            Terminate::Return(_) => Err(miette!("Cannot return from top-level code")),
+            Terminate::End => Ok(()),
+        }
     }
 
     fn eval_expression(&mut self, expr: &TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
@@ -274,7 +284,10 @@ impl<'de> Interpreter<'de> {
                         }
                         _ => return Err(miette::miette!("Invalid print operation")),
                     },
-                    crate::parse::Op::Return => todo!(),
+                    crate::parse::Op::Return => match values.as_slice() {
+                        [value] => Value::Return(Box::new(value.clone())),
+                        _ => return Err(miette::miette!("Invalid return operation")),
+                    },
                     crate::parse::Op::Field => todo!(),
                     crate::parse::Op::Var => unreachable!(),
                     crate::parse::Op::While => unreachable!(),
@@ -302,28 +315,40 @@ impl<'de> Interpreter<'de> {
                             self.environment.define(param, arg)?;
                         }
 
-                        self.eval_statement_tree(body.as_ref())?;
-
+                        let return_value = self.eval_statement_tree(body.as_ref())?;
                         self.environment.stack.pop();
+                        if let Terminate::Return(value) = return_value {
+                            value
+                        } else {
+                            Value::Nil
+                        }
                     }
                 }
-
-                Value::Nil
             }
         })
     }
 
-    fn eval_statement_tree(&mut self, statement: &StatementTree<'de>) -> Result<(), miette::Error> {
+    fn eval_statement_tree(
+        &mut self,
+        statement: &StatementTree<'de>,
+    ) -> Result<Terminate<'de>, miette::Error> {
         match statement {
             StatementTree::Block(statement_trees) => {
                 self.environment.stack.push();
                 for statement in statement_trees {
-                    self.eval_statement_tree(statement)?;
+                    let terminate = self.eval_statement_tree(statement)?;
+                    if let Terminate::Return(value) = terminate {
+                        self.environment.stack.pop();
+                        return Ok(Terminate::Return(value));
+                    }
                 }
                 self.environment.stack.pop();
             }
             StatementTree::Expression(token_tree) => {
-                self.eval_expression(token_tree)?;
+                let value = self.eval_expression(token_tree)?;
+                if let Value::Return(value) = value {
+                    return Ok(Terminate::Return(*value));
+                }
             }
             StatementTree::Fun { name, params, body } => {
                 let function = Value::Fun(Function::UserDefined {
@@ -345,14 +370,16 @@ impl<'de> Interpreter<'de> {
             } => {
                 let condition_value = self.eval_expression(condition.as_ref())?;
                 match condition_value {
-                    Value::Bool(true) => self.eval_statement_tree(then_branch)?,
+                    Value::Bool(true) => {
+                        self.eval_statement_tree(then_branch)?;
+                    }
                     Value::Bool(false) => {
                         if let Some(else_branch) = else_branch {
-                            self.eval_statement_tree(else_branch)?
+                            self.eval_statement_tree(else_branch)?;
                         }
                     }
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
-                }
+                };
             }
             StatementTree::For {
                 init,
@@ -386,7 +413,7 @@ impl<'de> Interpreter<'de> {
             }
             StatementTree::Class { name, father, body } => todo!(),
         };
-        Ok(())
+        Ok(Terminate::End)
     }
 }
 
@@ -398,6 +425,7 @@ impl Display for Value<'_> {
             Value::Str(s) => write!(f, "{s}"),
             Value::Fun(_) => write!(f, "<fun>"),
             Value::Nil => write!(f, "nil"),
+            Value::Return(value) => write!(f, "return {value}"),
         }
     }
 }
