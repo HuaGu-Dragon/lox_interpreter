@@ -40,6 +40,7 @@ pub struct Environment<'de> {
     stack: Stack<'de>,
 }
 
+#[derive(Debug)]
 pub enum Terminate<'de> {
     Return(Value<'de>),
     End,
@@ -332,7 +333,7 @@ impl<'de> Interpreter<'de> {
         &mut self,
         statement: &StatementTree<'de>,
     ) -> Result<Terminate<'de>, miette::Error> {
-        match statement {
+        let terminate = match statement {
             StatementTree::Block(statement_trees) => {
                 self.environment.stack.push();
                 for statement in statement_trees {
@@ -343,17 +344,22 @@ impl<'de> Interpreter<'de> {
                     }
                 }
                 self.environment.stack.pop();
+
+                Terminate::End
             }
             StatementTree::Expression(token_tree) => {
                 let value = self.eval_expression(token_tree)?;
                 if let Value::Return(value) = value {
-                    return Ok(Terminate::Return(*value));
+                    Terminate::Return(*value)
+                } else {
+                    Terminate::End
                 }
             }
             StatementTree::Fun { name, params, body } => {
                 let function = Value::Fun(Function::UserDefined {
                     params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
-                    body: Box::new((**body).clone()),
+                    // TODO: change to a reference?
+                    body: body.clone(),
                 });
                 self.environment.define(
                     Cow::Borrowed(match name {
@@ -362,6 +368,8 @@ impl<'de> Interpreter<'de> {
                     }),
                     function,
                 )?;
+
+                Terminate::End
             }
             StatementTree::If {
                 condition,
@@ -370,16 +378,16 @@ impl<'de> Interpreter<'de> {
             } => {
                 let condition_value = self.eval_expression(condition.as_ref())?;
                 match condition_value {
-                    Value::Bool(true) => {
-                        self.eval_statement_tree(then_branch)?;
-                    }
+                    Value::Bool(true) => self.eval_statement_tree(then_branch)?,
                     Value::Bool(false) => {
                         if let Some(else_branch) = else_branch {
-                            self.eval_statement_tree(else_branch)?;
+                            self.eval_statement_tree(else_branch)?
+                        } else {
+                            Terminate::End
                         }
                     }
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
-                };
+                }
             }
             StatementTree::For {
                 init,
@@ -396,11 +404,15 @@ impl<'de> Interpreter<'de> {
                     Value::Bool(false) => false,
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
                 } {
-                    self.eval_statement_tree(body.as_ref())?;
+                    if let Terminate::Return(value) = self.eval_statement_tree(body.as_ref())? {
+                        return Ok(Terminate::Return(value));
+                    }
                     self.eval_expression(increment)?;
                 }
 
                 self.environment.stack.pop();
+
+                Terminate::End
             }
             StatementTree::While { condition, body } => {
                 while match self.eval_expression(condition.as_ref())? {
@@ -408,12 +420,15 @@ impl<'de> Interpreter<'de> {
                     Value::Bool(false) => false,
                     _ => return Err(miette::miette!("Condition must evaluate to a boolean")),
                 } {
-                    self.eval_statement_tree(body.as_ref())?;
+                    if let Terminate::Return(value) = self.eval_statement_tree(body.as_ref())? {
+                        return Ok(Terminate::Return(value));
+                    }
                 }
+                Terminate::End
             }
             StatementTree::Class { name, father, body } => todo!(),
         };
-        Ok(Terminate::End)
+        Ok(terminate)
     }
 }
 
