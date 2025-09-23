@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use miette::{LabeledSpan, miette};
 
@@ -13,10 +13,14 @@ pub enum Value<'de> {
     Bool(bool),
     Str(Cow<'de, str>),
     Fun(Rc<Function<'de>>),
+    Method {
+        fun: Rc<Function<'de>>,
+        this: Box<Value<'de>>,
+    },
     Class(Rc<Class<'de>>),
     Instance {
         class: Cow<'de, str>,
-        fields: HashMap<Cow<'de, str>, Value<'de>>,
+        fields: Rc<RefCell<HashMap<Cow<'de, str>, Value<'de>>>>,
     },
     Return(Box<Value<'de>>),
     Nil,
@@ -206,23 +210,25 @@ impl<'de> Interpreter<'de> {
             // TODO: Handle assignment to fields
             TokenTree::Cons(Op::Equal, token_trees) => {
                 assert!(token_trees.len() == 2);
-                let mut trees = token_trees.iter().peekable();
-                if let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.peek() {
-                    trees.next();
-                    let value = self.eval_expression(trees.next().unwrap())?;
+                let mut trees = token_trees.iter();
+                let lhs = trees.next().unwrap();
+                let rhs = trees.next().unwrap();
+                if let TokenTree::Atom(Atom::Ident(name, _)) = lhs {
+                    let value = self.eval_expression(rhs)?;
                     self.environment.set(Cow::Borrowed(name), value)?;
                     Value::Nil
-                } else if let TokenTree::Cons(Op::Field, token_trees) = trees.next().unwrap() {
-                    todo!()
                 } else {
-                    return Err(miette!("confusing assignment statement"));
+                    let (fields, field_name) = self.resolve_left(lhs)?;
+                    let value = self.eval_expression(rhs)?;
+                    fields.borrow_mut().insert(field_name, value);
+                    Value::Nil
                 }
             }
             TokenTree::Cons(Op::Field, token_trees) => {
                 assert!(token_trees.len() == 2);
                 let mut trees = token_trees.iter();
                 let lhs = self.eval_expression(trees.next().unwrap())?;
-                let Value::Instance { class, fields } = lhs else {
+                let Value::Instance { class, fields } = lhs.clone() else {
                     // TODO: error handle
                     panic!("");
                 };
@@ -235,10 +241,25 @@ impl<'de> Interpreter<'de> {
                     let Value::Class(class) = instance else {
                         panic!("");
                     };
+                    // So many Rc, painful
                     if let Some(method) = class.methods.get::<str>(name.as_ref()) {
-                        method.clone()
-                    } else if let Some(value) = fields.get::<str>(name.as_ref()) {
-                        value.clone()
+                        if let Value::Fun(fun) = method {
+                            Value::Method {
+                                fun: fun.clone(),
+                                this: Box::new(lhs),
+                            }
+                        } else {
+                            method.clone()
+                        }
+                    } else if let Some(value) = fields.borrow().get::<str>(name.as_ref()) {
+                        if let Value::Fun(fun) = value {
+                            Value::Method {
+                                fun: fun.clone(),
+                                this: Box::new(lhs),
+                            }
+                        } else {
+                            value.clone()
+                        }
                     } else {
                         return Err(miette!("no value"));
                     }
@@ -360,8 +381,7 @@ impl<'de> Interpreter<'de> {
                             }
                             self.environment.stack.push();
 
-                            for (param, arg) in params.into_iter().zip(argument_values.into_iter())
-                            {
+                            for (param, arg) in params.iter().zip(argument_values.into_iter()) {
                                 // param is all borrow, so the clone is cheap
                                 self.environment.define(param.clone(), arg)?;
                             }
@@ -379,12 +399,12 @@ impl<'de> Interpreter<'de> {
                         if argument_values.is_empty() {
                             Value::Instance {
                                 class: class.name.clone(),
-                                fields: HashMap::new(),
+                                fields: Rc::new(RefCell::new(HashMap::new())),
                             }
                         } else {
                             let instance = Value::Instance {
                                 class: class.name.clone(),
-                                fields: HashMap::new(),
+                                fields: Rc::new(RefCell::new(HashMap::new())),
                             };
                             self.eval_method_call(
                                 class
@@ -396,6 +416,9 @@ impl<'de> Interpreter<'de> {
                                 argument_values,
                             )?
                         }
+                    }
+                    Value::Method { fun, this } => {
+                        self.eval_method_call(Value::Fun(fun), *this, argument_values)?
                     }
                     // TODO: error handle
                     _ => panic!(""),
@@ -585,7 +608,51 @@ impl<'de> Interpreter<'de> {
         };
         Ok(terminate)
     }
+
+    // TODO: improve this method
+    fn resolve_left<'a>(
+        &mut self,
+        expr: &'a TokenTree<'de>,
+    ) -> EvalResult<'de, InstanceFieldRef<'de>> {
+        match expr {
+            TokenTree::Cons(Op::Field, token_trees) => {
+                assert!(token_trees.len() == 2);
+                let object = &token_trees[0];
+                let field = &token_trees[1];
+                let value = self.eval_expression(object)?;
+                let Value::Instance { fields, .. } = value else {
+                    return Err(miette!("Left side is not an instance"));
+                };
+                let TokenTree::Atom(Atom::Ident(field_name, _)) = field else {
+                    return Err(miette!("Field name must be identifier"));
+                };
+                Ok((fields, Cow::Borrowed(field_name)))
+            }
+            TokenTree::Call { .. } => {
+                let value = self.eval_expression(expr)?;
+                let Value::Instance { .. } = value else {
+                    return Err(miette!("Call did not return an instance"));
+                };
+                Err(miette!("Cannot assign to a function call directly"))
+            }
+            TokenTree::Atom(Atom::Ident(name, _)) => {
+                let value = self
+                    .environment
+                    .get(name)
+                    .ok_or(miette!("Variable not found"))?;
+                let Value::Instance { fields, .. } = value else {
+                    return Err(miette!("Variable is not an instance"));
+                };
+                Ok((fields.clone(), Cow::Borrowed(name)))
+            }
+            _ => Err(miette!("Invalid assignment target")),
+        }
+    }
 }
+
+type InstanceFields<'de> = Rc<RefCell<HashMap<Cow<'de, str>, Value<'de>>>>;
+type InstanceFieldRef<'de> = (InstanceFields<'de>, Cow<'de, str>);
+type EvalResult<'de, T> = Result<T, miette::Error>;
 
 impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -596,9 +663,9 @@ impl Display for Value<'_> {
             Value::Fun(_) => write!(f, "<fun>"),
             Value::Nil => write!(f, "nil"),
             Value::Return(value) => write!(f, "return {value}"),
-            // TODO: more information
             Value::Class { .. } => write!(f, "<class>"),
             Value::Instance { .. } => write!(f, "<instance>"),
+            Value::Method { fun, this } => todo!(),
         }
     }
 }

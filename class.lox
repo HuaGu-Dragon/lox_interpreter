@@ -5,9 +5,9 @@ class test {
     }
 
     call(who) {
-        print "hello " + who;
+        print "hello " + who + this.a + this.b;
     }
 }
 
-var c = test();
+var c = test("1", "2");
 c.call("123");
