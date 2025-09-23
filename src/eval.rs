@@ -182,7 +182,13 @@ impl<'de> Interpreter<'de> {
                     value.clone()
                 }
                 Atom::Super => todo!(), // TODO: Handle super
-                Atom::This => todo!(),  // TODO: Handle this
+                Atom::This => {
+                    if let Some(value) = self.environment.get("this") {
+                        value.clone()
+                    } else {
+                        return Err(miette!("should use in method context"));
+                    }
+                }
             },
             TokenTree::Cons(Op::Var, token_trees) => {
                 // TODO: Handle nil declaration
@@ -206,19 +212,17 @@ impl<'de> Interpreter<'de> {
                     let value = self.eval_expression(trees.next().unwrap())?;
                     self.environment.set(Cow::Borrowed(name), value)?;
                     Value::Nil
-                } else if let Value::Instance { class, fields } =
-                    self.eval_expression(trees.next().unwrap())?
-                {
+                } else if let TokenTree::Cons(Op::Field, token_trees) = trees.next().unwrap() {
                     todo!()
                 } else {
-                    todo!()
+                    return Err(miette!("confusing assignment statement"));
                 }
             }
             TokenTree::Cons(Op::Field, token_trees) => {
                 assert!(token_trees.len() == 2);
                 let mut trees = token_trees.iter();
                 let lhs = self.eval_expression(trees.next().unwrap())?;
-                let Value::Instance { class, mut fields } = lhs else {
+                let Value::Instance { class, fields } = lhs else {
                     // TODO: error handle
                     panic!("");
                 };
@@ -233,11 +237,10 @@ impl<'de> Interpreter<'de> {
                     };
                     if let Some(method) = class.methods.get::<str>(name.as_ref()) {
                         method.clone()
+                    } else if let Some(value) = fields.get::<str>(name.as_ref()) {
+                        value.clone()
                     } else {
-                        fields
-                            .entry(Cow::Borrowed(*name))
-                            .or_insert(Value::Nil)
-                            .clone()
+                        return Err(miette!("no value"));
                     }
                 } else {
                     return Err(miette!("not a class"));
