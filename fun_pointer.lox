@@ -1,0 +1,8 @@
+fun add(a, b) {
+    return a + b;
+}
+
+var add_pointer = add;
+
+var c = add_pointer(10, 20);
+print c;

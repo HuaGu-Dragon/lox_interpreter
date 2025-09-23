@@ -26,3 +26,14 @@ if (a.foo(true, 42, "hello banana" + " also")()) {
     }
 }
 print "second statement";
+
+class Test {
+    init(param1, param2) {
+        this.a = param1;
+        this.b = param2;
+    }
+
+    test() {
+        return this.a + this.b;
+    }
+}

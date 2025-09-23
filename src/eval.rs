@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, fmt::Display};
 use miette::{LabeledSpan, miette};
 
 use crate::{
-    Parser,
+    Parser, lex,
     parse::{Atom, Op, StatementTree, TokenTree},
 };
 
@@ -13,6 +13,11 @@ pub enum Value<'de> {
     Bool(bool),
     Str(Cow<'de, str>),
     Fun(Function<'de>),
+    Class {
+        name: Cow<'de, str>,
+        father: Option<Cow<'de, str>>,
+        methods: HashMap<Cow<'de, str>, Value<'de>>,
+    },
     Return(Box<Value<'de>>),
     Nil,
 }
@@ -185,6 +190,7 @@ impl<'de> Interpreter<'de> {
                 self.environment.define(Cow::Borrowed(name), value)?;
                 Value::Nil
             }
+            // TODO: Handle assignment to fields
             TokenTree::Cons(Op::Equal, token_trees) => {
                 assert!(token_trees.len() == 2);
                 let mut trees = token_trees.iter();
@@ -426,7 +432,45 @@ impl<'de> Interpreter<'de> {
                 }
                 Terminate::End
             }
-            StatementTree::Class { name, father, body } => todo!(),
+            StatementTree::Class { name, father, body } => {
+                // TODO: Handle error
+                let Atom::Ident(name, _) = name else {
+                    panic!("")
+                };
+
+                let StatementTree::Block(body) = body.as_ref() else {
+                    panic!()
+                };
+
+                let mut methods = HashMap::new();
+
+                body.iter().for_each(|statement| {
+                    let StatementTree::Fun { name, params, body } = statement else {
+                        panic!("");
+                    };
+                    let method = Value::Fun(Function::UserDefined {
+                        params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
+                        body: body.clone(),
+                    });
+                    methods.insert(
+                        match name {
+                            Atom::Ident(name, _) => Cow::Borrowed(*name),
+                            _ => panic!("Function name must be an identifier"),
+                        },
+                        method,
+                    );
+                });
+
+                let class = Value::Class {
+                    name: Cow::Borrowed(name),
+                    father: None,
+                    methods,
+                };
+
+                self.environment.define(Cow::Borrowed(name), class)?;
+
+                Terminate::End
+            }
         };
         Ok(terminate)
     }
@@ -441,6 +485,7 @@ impl Display for Value<'_> {
             Value::Fun(_) => write!(f, "<fun>"),
             Value::Nil => write!(f, "nil"),
             Value::Return(value) => write!(f, "return {value}"),
+            Value::Class { .. } => write!(f, "<class>"),
         }
     }
 }

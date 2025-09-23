@@ -144,6 +144,93 @@ impl<'de> Parser<'de> {
         Ok(StatementTree::Block(block))
     }
 
+    pub fn parse_class_method(&mut self) -> Result<StatementTree<'de>, Error> {
+        let token = self
+            .lexer
+            .expect(TokenKind::Ident, "Expected identifier")
+            .wrap_err("in method name")?;
+
+        let name = token.literal;
+        let ident = Atom::Ident(token.literal, self.lexer.byte);
+        self.lexer
+            .expect(TokenKind::LeftParen, "Expected '(' after method name")
+            .wrap_err_with(|| format!("in parameter list of method {name}"))?;
+        let mut params = Vec::new();
+
+        if matches!(
+            self.lexer.peek(),
+            Some(Ok(Token {
+                kind: TokenKind::RightParen,
+                ..
+            }))
+        ) {
+            self.lexer.next(); // Consume the right parenthesis
+        } else {
+            loop {
+                let param = self
+                    .lexer
+                    .expect(TokenKind::Ident, "Expected identifier")
+                    .wrap_err_with(|| {
+                        format!("in parameter #{} of method {name}", params.len() + 1)
+                    })?;
+                params.push(param);
+
+                let token = self
+                    .lexer
+                    .expect_where(
+                        |token| matches!(token.kind, TokenKind::Comma | TokenKind::RightParen),
+                        "Expected ',' or ')' after method parameter",
+                    )
+                    .wrap_err_with(|| format!("in parameter list of method {name}"))?;
+
+                if token.kind == TokenKind::RightParen {
+                    break;
+                }
+            }
+        }
+
+        let body = self
+            .parse_block()
+            .wrap_err_with(|| format!("in body of method {name}"))?;
+
+        Ok(StatementTree::Fun {
+            name: ident,
+            params,
+            body: Box::new(body),
+        })
+    }
+
+    pub fn parse_class(&mut self) -> Result<StatementTree<'de>, Error> {
+        let name = self
+            .lexer
+            .expect(TokenKind::Ident, "Expected identifier")
+            .wrap_err("in class name")?;
+        let ident = Atom::Ident(name.literal, self.lexer.byte);
+
+        self.lexer.expect(TokenKind::LeftBrace, "Expected '{'")?;
+
+        let mut methods = Vec::new();
+        while !matches!(
+            self.lexer.peek(),
+            Some(Ok(Token {
+                kind: TokenKind::RightBrace,
+                ..
+            }))
+        ) {
+            let method = self.parse_class_method().wrap_err("in class method")?;
+            methods.push(method);
+        }
+
+        self.lexer.expect(TokenKind::RightBrace, "Expected '}'")?;
+
+        // TODO: Implement class inheritance
+        Ok(StatementTree::Class {
+            name: ident,
+            father: None,
+            body: Box::new(StatementTree::Block(methods)),
+        })
+    }
+
     pub fn parse_fun_call(&mut self) -> Result<Vec<TokenTree<'de>>, Error> {
         let mut arguments = Vec::new();
 
@@ -318,25 +405,7 @@ impl<'de> Parser<'de> {
                 Token {
                     kind: TokenKind::Class,
                     ..
-                } => {
-                    let token = self
-                        .lexer
-                        .expect(TokenKind::Ident, "Expected identifier")
-                        .wrap_err("in class name")?;
-                    let _ident = TokenTree::Atom(Atom::Ident(token.literal, self.lexer.byte));
-
-                    // let class_block = self.parse_class_body().wrap_err("in class body")?;
-
-                    // TODO: support inheritance
-                    todo!()
-                    // let block = self.parse_expression_within(0).wrap_err("in class body")?;
-                    // let block = self.parse_block().wrap_err("in class definition")?;
-
-                    // return Ok(StatementTree::Expression(TokenTree::Cons(
-                    //     Op::Class,
-                    //     vec![ident, block],
-                    // )));
-                }
+                } => return self.parse_class().wrap_err("in class body"),
                 Token {
                     kind: TokenKind::Var,
                     ..
@@ -822,7 +891,13 @@ impl Display for StatementTree<'_> {
             } => write!(f, "(for {init} {condition} {increment} {body})"),
             StatementTree::While { condition, body } => write!(f, "(while {condition} {body})"),
             // TODO: support inheritance
-            StatementTree::Class { name, father, body } => todo!(),
+            StatementTree::Class { name, father, .. } => {
+                if let Some(father) = father {
+                    write!(f, "(class {name} < {father} )")
+                } else {
+                    write!(f, "(class {name} )")
+                }
+            }
         }
     }
 }
@@ -847,7 +922,7 @@ fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
         | Op::GreaterEqual => (3, 4),
         Op::Plus | Op::Minus => (5, 6),
         Op::Star | Op::Slash => (7, 8),
-        Op::Field => (11, 10),
+        Op::Field => (10, 13),
         _ => return None,
     };
     Some(res)
@@ -855,7 +930,7 @@ fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
 
 fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
     let res = match op {
-        Op::Call => (9, ()),
+        Op::Call => (12, ()),
         _ => return None,
     };
     Some(res)
