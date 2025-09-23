@@ -37,6 +37,7 @@ pub enum Function<'de> {
         body: fn(&[Value<'de>]) -> Result<Value<'de>, miette::Error>,
     },
     UserDefined {
+        name: Cow<'de, str>,
         params: Vec<Cow<'de, str>>,
         body: Box<StatementTree<'de>>,
     },
@@ -63,7 +64,6 @@ impl<'de> Environment<'de> {
         self.stack.iter().find_map(|frame| frame.get(name))
     }
 
-    // TODO: support the father frame
     pub fn set(&mut self, name: Cow<'de, str>, value: Value<'de>) -> Result<(), miette::Error> {
         if let Some(entry) = self.stack.iter_mut().find_map(|frame| frame.get_mut(&name)) {
             *entry = value;
@@ -200,14 +200,48 @@ impl<'de> Interpreter<'de> {
             // TODO: Handle assignment to fields
             TokenTree::Cons(Op::Equal, token_trees) => {
                 assert!(token_trees.len() == 2);
+                let mut trees = token_trees.iter().peekable();
+                if let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.peek() {
+                    trees.next();
+                    let value = self.eval_expression(trees.next().unwrap())?;
+                    self.environment.set(Cow::Borrowed(name), value)?;
+                    Value::Nil
+                } else if let Value::Instance { class, fields } =
+                    self.eval_expression(trees.next().unwrap())?
+                {
+                    todo!()
+                } else {
+                    todo!()
+                }
+            }
+            TokenTree::Cons(Op::Field, token_trees) => {
+                assert!(token_trees.len() == 2);
                 let mut trees = token_trees.iter();
-                let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
-                    // TODO: beautiful Handle
-                    panic!("")
+                let lhs = self.eval_expression(trees.next().unwrap())?;
+                let Value::Instance { class, mut fields } = lhs else {
+                    // TODO: error handle
+                    panic!("");
                 };
-                let value = self.eval_expression(trees.next().unwrap())?;
-                self.environment.set(Cow::Borrowed(name), value)?;
-                Value::Nil
+                let TokenTree::Atom(Atom::Ident(name, _)) = trees.next().unwrap() else {
+                    // TODO: Error handle
+                    panic!("");
+                };
+
+                if let Some(instance) = self.environment.get(class.as_ref()) {
+                    let Value::Class(class) = instance else {
+                        panic!("");
+                    };
+                    if let Some(method) = class.methods.get::<str>(name.as_ref()) {
+                        method.clone()
+                    } else {
+                        fields
+                            .entry(Cow::Borrowed(*name))
+                            .or_insert(Value::Nil)
+                            .clone()
+                    }
+                } else {
+                    return Err(miette!("not a class"));
+                }
             }
             TokenTree::Cons(op, token_trees) => {
                 let values = token_trees
@@ -302,7 +336,7 @@ impl<'de> Interpreter<'de> {
                         [value] => Value::Return(Box::new(value.clone())),
                         _ => return Err(miette::miette!("Invalid return operation")),
                     },
-                    crate::parse::Op::Field => todo!(),
+                    crate::parse::Op::Field => unreachable!(),
                     crate::parse::Op::Var => unreachable!(),
                     crate::parse::Op::While => unreachable!(),
                     crate::parse::Op::Call => todo!(),
@@ -317,7 +351,7 @@ impl<'de> Interpreter<'de> {
                 match callee_value {
                     Value::Fun(fun) => match fun.as_ref() {
                         Function::Native { name, params, body } => todo!(),
-                        Function::UserDefined { params, body } => {
+                        Function::UserDefined { params, body, .. } => {
                             if params.len() != argument_values.len() {
                                 return Err(miette::miette!("Argument count mismatch"));
                             }
@@ -345,9 +379,17 @@ impl<'de> Interpreter<'de> {
                                 fields: HashMap::new(),
                             }
                         } else {
+                            let instance = Value::Instance {
+                                class: class.name.clone(),
+                                fields: HashMap::new(),
+                            };
                             self.eval_method_call(
-                                class.as_ref(),
-                                Cow::Borrowed("init"),
+                                class
+                                    .methods
+                                    .get("init")
+                                    .ok_or(miette!("don't have init method"))?
+                                    .clone(),
+                                instance,
                                 argument_values,
                             )?
                         }
@@ -361,11 +403,38 @@ impl<'de> Interpreter<'de> {
 
     fn eval_method_call(
         &mut self,
-        class: &Class<'de>,
-        method: Cow<'de, str>,
-        args: Vec<Value>,
+        method: Value<'de>,
+        instance: Value<'de>,
+        args: Vec<Value<'de>>,
     ) -> Result<Value<'de>, miette::Error> {
-        todo!()
+        // TODO: Error Handle
+        let Value::Fun(fun) = method else { panic!("") };
+        match fun.as_ref() {
+            Function::UserDefined { name, params, body } => {
+                if params.len() != args.len() {
+                    return Err(miette!("Argument count mismatch"));
+                }
+                self.environment.stack.push();
+
+                self.environment
+                    .define(Cow::Borrowed("this"), instance.clone())?;
+                for (param, arg) in params.iter().zip(args.into_iter()) {
+                    self.environment.define(param.clone(), arg)?;
+                }
+                let ret = self.eval_statement_tree(body)?;
+
+                self.environment.stack.pop();
+
+                if name.eq("init") {
+                    Ok(instance)
+                } else if let Terminate::Return(value) = ret {
+                    Ok(value)
+                } else {
+                    Ok(Value::Nil)
+                }
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn eval_statement_tree(
@@ -396,6 +465,11 @@ impl<'de> Interpreter<'de> {
             }
             StatementTree::Fun { name, params, body } => {
                 let function = Value::Fun(Rc::new(Function::UserDefined {
+                    name: Cow::Borrowed(match name {
+                        Atom::Ident(name, _) => name,
+                        // TODO: Error Handling
+                        _ => panic!(""),
+                    }),
                     params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
                     // TODO: change to a reference?
                     body: body.clone(),
@@ -481,17 +555,16 @@ impl<'de> Interpreter<'de> {
                     let StatementTree::Fun { name, params, body } = statement else {
                         panic!("");
                     };
+                    let name = match name {
+                        Atom::Ident(name, _) => Cow::Borrowed(*name),
+                        _ => panic!("Function name must be an identifier"),
+                    };
                     let method = Value::Fun(Rc::new(Function::UserDefined {
+                        name: name.clone(),
                         params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
                         body: body.clone(),
                     }));
-                    methods.insert(
-                        match name {
-                            Atom::Ident(name, _) => Cow::Borrowed(*name),
-                            _ => panic!("Function name must be an identifier"),
-                        },
-                        method,
-                    );
+                    methods.insert(name, method);
                 });
 
                 let class = Rc::new(Class {

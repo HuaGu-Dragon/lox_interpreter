@@ -98,6 +98,7 @@ fn main() -> miette::Result<()> {
                         return Err(e);
                     }
                 };
+                dbg!(&statement);
                 println!("{statement}");
             }
         }

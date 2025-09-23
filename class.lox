@@ -3,8 +3,11 @@ class test {
         this.a = a;
         this.b = b;
     }
+
+    call(who) {
+        print "hello " + who;
+    }
 }
 
-var c = test;
-print c(1,2);
-print test;
+var c = test();
+c.call("123");
