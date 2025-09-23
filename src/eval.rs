@@ -339,13 +339,19 @@ impl<'de> Interpreter<'de> {
                         }
                     },
                     Value::Class(class) => {
-                        if arguments.is_empty() {
+                        if argument_values.is_empty() {
                             Value::Instance {
                                 class: class.name.clone(),
                                 fields: HashMap::new(),
                             }
+                        } else if let Some(init) = class.methods.get("init") {
+                            self.eval_method_call(
+                                class.as_ref(),
+                                Cow::Borrowed("init"),
+                                argument_values,
+                            )?
                         } else {
-                            todo!()
+                            return Err(miette!("don't have init method"));
                         }
                     }
                     // TODO: error handle
@@ -353,6 +359,15 @@ impl<'de> Interpreter<'de> {
                 }
             }
         })
+    }
+
+    fn eval_method_call(
+        &mut self,
+        class: &Class,
+        method: Cow<'de, str>,
+        args: Vec<Value>,
+    ) -> Result<Value<'de>, miette::Error> {
+        todo!()
     }
 
     fn eval_statement_tree(

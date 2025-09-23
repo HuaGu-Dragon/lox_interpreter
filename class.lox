@@ -6,5 +6,5 @@ class test {
 }
 
 var c = test;
-print c();
+print c(1,2);
 print test;
