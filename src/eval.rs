@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
 
 use miette::{LabeledSpan, miette};
 
 use crate::{
-    Parser, lex,
+    Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
 };
 
@@ -12,14 +12,21 @@ pub enum Value<'de> {
     Number(f64),
     Bool(bool),
     Str(Cow<'de, str>),
-    Fun(Function<'de>),
-    Class {
-        name: Cow<'de, str>,
-        father: Option<Cow<'de, str>>,
-        methods: HashMap<Cow<'de, str>, Value<'de>>,
+    Fun(Rc<Function<'de>>),
+    Class(Rc<Class<'de>>),
+    Instance {
+        class: Cow<'de, str>,
+        fields: HashMap<Cow<'de, str>, Value<'de>>,
     },
     Return(Box<Value<'de>>),
     Nil,
+}
+
+#[derive(Debug, Clone)]
+pub struct Class<'de> {
+    name: Cow<'de, str>,
+    father: Option<Cow<'de, str>>,
+    methods: HashMap<Cow<'de, str>, Value<'de>>,
 }
 
 #[derive(Debug, Clone)]
@@ -307,29 +314,42 @@ impl<'de> Interpreter<'de> {
                     .iter()
                     .map(|arg| self.eval_expression(arg))
                     .collect::<Result<Vec<_>, _>>()?;
-                let Value::Fun(fun) = callee_value else {
-                    panic!("Can only call functions");
-                };
-                match fun {
-                    Function::Native { name, params, body } => todo!(),
-                    Function::UserDefined { params, body } => {
-                        if params.len() != argument_values.len() {
-                            return Err(miette::miette!("Argument count mismatch"));
-                        }
-                        self.environment.stack.push();
+                match callee_value {
+                    Value::Fun(fun) => match fun.as_ref() {
+                        Function::Native { name, params, body } => todo!(),
+                        Function::UserDefined { params, body } => {
+                            if params.len() != argument_values.len() {
+                                return Err(miette::miette!("Argument count mismatch"));
+                            }
+                            self.environment.stack.push();
 
-                        for (param, arg) in params.into_iter().zip(argument_values.into_iter()) {
-                            self.environment.define(param, arg)?;
-                        }
+                            for (param, arg) in params.into_iter().zip(argument_values.into_iter())
+                            {
+                                // param is all borrow, so the clone is cheap
+                                self.environment.define(param.clone(), arg)?;
+                            }
 
-                        let return_value = self.eval_statement_tree(body.as_ref())?;
-                        self.environment.stack.pop();
-                        if let Terminate::Return(value) = return_value {
-                            value
+                            let return_value = self.eval_statement_tree(body.as_ref())?;
+                            self.environment.stack.pop();
+                            if let Terminate::Return(value) = return_value {
+                                value
+                            } else {
+                                Value::Nil
+                            }
+                        }
+                    },
+                    Value::Class(class) => {
+                        if arguments.is_empty() {
+                            Value::Instance {
+                                class: class.name.clone(),
+                                fields: HashMap::new(),
+                            }
                         } else {
-                            Value::Nil
+                            todo!()
                         }
                     }
+                    // TODO: error handle
+                    _ => panic!(""),
                 }
             }
         })
@@ -362,11 +382,11 @@ impl<'de> Interpreter<'de> {
                 }
             }
             StatementTree::Fun { name, params, body } => {
-                let function = Value::Fun(Function::UserDefined {
+                let function = Value::Fun(Rc::new(Function::UserDefined {
                     params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
                     // TODO: change to a reference?
                     body: body.clone(),
-                });
+                }));
                 self.environment.define(
                     Cow::Borrowed(match name {
                         Atom::Ident(name, _) => name,
@@ -448,10 +468,10 @@ impl<'de> Interpreter<'de> {
                     let StatementTree::Fun { name, params, body } = statement else {
                         panic!("");
                     };
-                    let method = Value::Fun(Function::UserDefined {
+                    let method = Value::Fun(Rc::new(Function::UserDefined {
                         params: params.iter().map(|s| Cow::Borrowed(s.literal)).collect(),
                         body: body.clone(),
-                    });
+                    }));
                     methods.insert(
                         match name {
                             Atom::Ident(name, _) => Cow::Borrowed(*name),
@@ -461,11 +481,13 @@ impl<'de> Interpreter<'de> {
                     );
                 });
 
-                let class = Value::Class {
+                let class = Rc::new(Class {
                     name: Cow::Borrowed(name),
                     father: None,
                     methods,
-                };
+                });
+
+                let class = Value::Class(class);
 
                 self.environment.define(Cow::Borrowed(name), class)?;
 
@@ -485,7 +507,9 @@ impl Display for Value<'_> {
             Value::Fun(_) => write!(f, "<fun>"),
             Value::Nil => write!(f, "nil"),
             Value::Return(value) => write!(f, "return {value}"),
+            // TODO: more information
             Value::Class { .. } => write!(f, "<class>"),
+            Value::Instance { .. } => write!(f, "<instance>"),
         }
     }
 }

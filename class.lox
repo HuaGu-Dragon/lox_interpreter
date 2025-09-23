@@ -1,0 +1,10 @@
+class test {
+    init(a, b) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+var c = test;
+print c();
+print test;
