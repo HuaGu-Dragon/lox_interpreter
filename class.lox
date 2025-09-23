@@ -4,10 +4,24 @@ class test {
         this.b = b;
     }
 
+    get_a() {
+        return this.a;
+    }
+
     call(who) {
-        print "hello " + who + this.a + this.b;
+        print "hello " + who;
+        print this.a;
+        print this.b;
     }
 }
 
-var c = test("1", "2");
-c.call("123");
+class field {
+    child() {
+        print "success";
+    }
+}
+
+var x = test(field(), "1");
+x.get_a().child();
+x.a.child();
+x.call("123");
