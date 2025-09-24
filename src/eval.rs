@@ -29,7 +29,7 @@ pub enum Value<'de> {
 #[derive(Debug, Clone)]
 pub struct Class<'de> {
     name: Cow<'de, str>,
-    _father: Option<Cow<'de, str>>,
+    father: Option<Cow<'de, str>>,
     methods: HashMap<Cow<'de, str>, Value<'de>>,
 }
 
@@ -565,10 +565,20 @@ impl<'de> Interpreter<'de> {
                 }
                 Terminate::End
             }
-            StatementTree::Class { name, body, .. } => {
+            StatementTree::Class { name, father, body } => {
                 // TODO: Handle error
                 let Atom::Ident(name, _) = name else {
                     panic!("")
+                };
+
+                let father = if let Some(father) = father {
+                    // TODO: Handle error
+                    let Atom::Ident(name, _) = father else {
+                        panic!("")
+                    };
+                    Some(Cow::Borrowed(*name))
+                } else {
+                    None
                 };
 
                 let StatementTree::Block(body) = body.as_ref() else {
@@ -595,7 +605,7 @@ impl<'de> Interpreter<'de> {
 
                 let class = Rc::new(Class {
                     name: Cow::Borrowed(name),
-                    _father: None,
+                    father,
                     methods,
                 });
 
