@@ -9,9 +9,16 @@ class test {
     }
 
     call(who) {
+        fun fib(a) {
+            if (a <= 2) { return 2; }
+            else { return fib(a - 1) + fib(a - 2); }
+        }
         print "hello " + who;
         print this.a;
         print this.b;
+        for (var i = 10; i < 15; i = i + 1) {
+            print fib(i);
+        }
     }
 }
 

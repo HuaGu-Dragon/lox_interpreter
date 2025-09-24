@@ -185,18 +185,19 @@ impl<'de> Lexer<'de> {
     }
 
     pub fn expect(&mut self, expected: TokenKind, error: &str) -> Result<Token<'de>, Error> {
-        self.expect_where(|token| token.kind == expected, error)
+        self.expect_where(|token| token.kind == expected, expected, error)
     }
 
     pub fn expect_where(
         &mut self,
         check: impl FnOnce(&Token<'de>) -> bool,
+        expected: TokenKind,
         error: &str,
     ) -> Result<Token<'de>, Error> {
         match self.next() {
             Some(Ok(token)) if check(&token) => Ok(token),
             Some(Ok(token)) => Err(miette::miette!(
-                help = "Expected {expected:?}",
+                help = format!("use `{expected:?}` here instead"),
                 labels = vec![LabeledSpan::at(
                     self.byte - token.literal.len()..self.byte,
                     "here",

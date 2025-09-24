@@ -179,6 +179,7 @@ impl<'de> Parser<'de> {
                     .lexer
                     .expect_where(
                         |token| matches!(token.kind, TokenKind::Comma | TokenKind::RightParen),
+                        TokenKind::Comma,
                         "Expected ',' or ')' after method parameter",
                     )
                     .wrap_err_with(|| format!("in parameter list of method {name}"))?;
@@ -207,6 +208,23 @@ impl<'de> Parser<'de> {
             .wrap_err("in class name")?;
         let ident = Atom::Ident(name.literal, self.lexer.byte);
 
+        let father = if matches!(
+            self.lexer.peek(),
+            Some(Ok(Token {
+                kind: TokenKind::Less,
+                ..
+            }))
+        ) {
+            self.lexer.next(); // Consume the '<' token
+            let father = self
+                .lexer
+                .expect(TokenKind::Ident, "Expected identifier after '<'")
+                .wrap_err("in superclass name")?;
+            Some(Atom::Ident(father.literal, self.lexer.byte))
+        } else {
+            None
+        };
+
         self.lexer.expect(TokenKind::LeftBrace, "Expected '{'")?;
 
         let mut methods = Vec::new();
@@ -226,7 +244,7 @@ impl<'de> Parser<'de> {
         // TODO: Implement class inheritance
         Ok(StatementTree::Class {
             name: ident,
-            father: None,
+            father,
             body: Box::new(StatementTree::Block(methods)),
         })
     }
@@ -251,6 +269,7 @@ impl<'de> Parser<'de> {
 
                 let token = self.lexer.expect_where(
                     |token| matches!(token.kind, TokenKind::Comma | TokenKind::RightParen),
+                    TokenKind::Comma,
                     "Expected ',' or ')' after function argument",
                 )?;
 
@@ -474,6 +493,7 @@ impl<'de> Parser<'de> {
                                             TokenKind::Comma | TokenKind::RightParen
                                         )
                                     },
+                                    TokenKind::Comma,
                                     "Expected ',' or ')' after function parameter",
                                 )
                                 .wrap_err_with(|| {

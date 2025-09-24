@@ -27,7 +27,7 @@ if (a.foo(true, 42, "hello banana" + " also")()) {
 }
 print "second statement";
 
-class Test {
+class Test < Super {
     init(param1, param2) {
         this.a = param1;
         this.b = param2;

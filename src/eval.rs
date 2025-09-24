@@ -29,7 +29,7 @@ pub enum Value<'de> {
 #[derive(Debug, Clone)]
 pub struct Class<'de> {
     name: Cow<'de, str>,
-    father: Option<Cow<'de, str>>,
+    _father: Option<Cow<'de, str>>,
     methods: HashMap<Cow<'de, str>, Value<'de>>,
 }
 
@@ -374,7 +374,7 @@ impl<'de> Interpreter<'de> {
                     .collect::<Result<Vec<_>, _>>()?;
                 match callee_value {
                     Value::Fun(fun) => match fun.as_ref() {
-                        Function::Native { name, params, body } => todo!(),
+                        Function::Native { .. } => todo!(),
                         Function::UserDefined { params, body, .. } => {
                             if params.len() != argument_values.len() {
                                 return Err(miette::miette!("Argument count mismatch"));
@@ -565,7 +565,7 @@ impl<'de> Interpreter<'de> {
                 }
                 Terminate::End
             }
-            StatementTree::Class { name, father, body } => {
+            StatementTree::Class { name, body, .. } => {
                 // TODO: Handle error
                 let Atom::Ident(name, _) = name else {
                     panic!("")
@@ -595,7 +595,7 @@ impl<'de> Interpreter<'de> {
 
                 let class = Rc::new(Class {
                     name: Cow::Borrowed(name),
-                    father: None,
+                    _father: None,
                     methods,
                 });
 
@@ -665,7 +665,7 @@ impl Display for Value<'_> {
             Value::Return(value) => write!(f, "return {value}"),
             Value::Class { .. } => write!(f, "<class>"),
             Value::Instance { .. } => write!(f, "<instance>"),
-            Value::Method { fun, this } => todo!(),
+            Value::Method { fun, this } => write!(f, "<method {:?} bound to {:?}>", fun, this),
         }
     }
 }
