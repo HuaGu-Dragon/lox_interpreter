@@ -250,13 +250,19 @@ impl<'de> Interpreter<'de> {
                     };
 
                     let father = match class.father.as_ref() {
-                        Some(father) => self
-                            .environment
-                            .get(father)
-                            .map(|father| Box::new(father.clone())),
+                        Some(father) => {
+                            let Some(Value::Class(father)) = self.environment.get(father) else {
+                                return Err(miette!("no father class"));
+                            };
+
+                            father
+                                .methods
+                                .get::<str>(name)
+                                .map(|init| Box::new(init.clone()))
+                        }
+
                         None => None,
                     };
-
                     // So many Rc, painful
                     if let Some(method) = class.methods.get::<str>(name.as_ref()) {
                         if let Value::Fun(fun) = method {
@@ -273,7 +279,7 @@ impl<'de> Interpreter<'de> {
                             Value::Method {
                                 fun: fun.clone(),
                                 this: Box::new(lhs),
-                                father,
+                                father: None,
                             }
                         } else {
                             value.clone()
@@ -426,11 +432,16 @@ impl<'de> Interpreter<'de> {
                             };
 
                             let father = match class.father.as_ref() {
-                                Some(father) => self.environment.get(father).cloned(),
+                                Some(father) => {
+                                    let Some(Value::Class(father)) = self.environment.get(father)
+                                    else {
+                                        return Err(miette!("no father class"));
+                                    };
+
+                                    father.methods.get("init").cloned()
+                                }
                                 None => None,
                             };
-
-                            let father = father.clone();
 
                             self.eval_method_call(
                                 class
@@ -461,7 +472,7 @@ impl<'de> Interpreter<'de> {
         &mut self,
         method: Value<'de>,
         instance: Value<'de>,
-        father: Option<Value<'de>>,
+        father: Option<Value<'de>>, // should be a function instead of class
         args: Vec<Value<'de>>,
     ) -> Result<Value<'de>, miette::Error> {
         // TODO: Error Handle

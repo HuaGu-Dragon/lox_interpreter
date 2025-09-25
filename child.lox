@@ -7,7 +7,7 @@ class child < father {
 
 class father {
    init(a) {
-        this.a = this.a + a;
+        this.a = this.a + this.a;
         print a;
    }
 }
