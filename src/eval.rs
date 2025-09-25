@@ -186,7 +186,13 @@ impl<'de> Interpreter<'de> {
                     // TODO: is a way to remove clone?
                     value.clone()
                 }
-                Atom::Super => todo!(), // TODO: Handle super
+                Atom::Super => {
+                    if let Some(value) = self.environment.get("super") {
+                        value.clone()
+                    } else {
+                        return Err(miette!("should use in subclass method context"));
+                    }
+                }
                 Atom::This => {
                     if let Some(value) = self.environment.get("this") {
                         value.clone()
@@ -469,6 +475,10 @@ impl<'de> Interpreter<'de> {
 
                 self.environment
                     .define(Cow::Borrowed("this"), instance.clone())?;
+
+                if let Some(father) = father {
+                    self.environment.define(Cow::Borrowed("super"), father)?;
+                }
 
                 for (param, arg) in params.iter().zip(args.into_iter()) {
                     self.environment.define(param.clone(), arg)?;

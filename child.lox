@@ -1,0 +1,16 @@
+class child < father {
+    init(a) {
+        this.a = a;
+        super(a);
+    }
+}
+
+class father {
+   init(a) {
+        this.a = this.a + a;
+        print a;
+   }
+}
+
+var instance = child(123);
+print instance.a;
