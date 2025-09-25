@@ -16,6 +16,7 @@ pub enum Value<'de> {
     Method {
         fun: Rc<Function<'de>>,
         this: Box<Value<'de>>,
+        father: Option<Box<Value<'de>>>,
     },
     Class(Rc<Class<'de>>),
     Instance {
@@ -241,12 +242,22 @@ impl<'de> Interpreter<'de> {
                     let Value::Class(class) = instance else {
                         panic!("");
                     };
+
+                    let father = match class.father.as_ref() {
+                        Some(father) => self
+                            .environment
+                            .get(father)
+                            .map(|father| Box::new(father.clone())),
+                        None => None,
+                    };
+
                     // So many Rc, painful
                     if let Some(method) = class.methods.get::<str>(name.as_ref()) {
                         if let Value::Fun(fun) = method {
                             Value::Method {
                                 fun: fun.clone(),
                                 this: Box::new(lhs),
+                                father,
                             }
                         } else {
                             method.clone()
@@ -256,6 +267,7 @@ impl<'de> Interpreter<'de> {
                             Value::Method {
                                 fun: fun.clone(),
                                 this: Box::new(lhs),
+                                father,
                             }
                         } else {
                             value.clone()
@@ -406,6 +418,14 @@ impl<'de> Interpreter<'de> {
                                 class: class.name.clone(),
                                 fields: Rc::new(RefCell::new(HashMap::new())),
                             };
+
+                            let father = match class.father.as_ref() {
+                                Some(father) => self.environment.get(father).cloned(),
+                                None => None,
+                            };
+
+                            let father = father.clone();
+
                             self.eval_method_call(
                                 class
                                     .methods
@@ -413,13 +433,17 @@ impl<'de> Interpreter<'de> {
                                     .ok_or(miette!("don't have init method"))?
                                     .clone(),
                                 instance,
+                                father,
                                 argument_values,
                             )?
                         }
                     }
-                    Value::Method { fun, this } => {
-                        self.eval_method_call(Value::Fun(fun), *this, argument_values)?
-                    }
+                    Value::Method { fun, this, father } => self.eval_method_call(
+                        Value::Fun(fun),
+                        *this,
+                        father.map(|father| *father),
+                        argument_values,
+                    )?,
                     // TODO: error handle
                     _ => panic!(""),
                 }
@@ -431,6 +455,7 @@ impl<'de> Interpreter<'de> {
         &mut self,
         method: Value<'de>,
         instance: Value<'de>,
+        father: Option<Value<'de>>,
         args: Vec<Value<'de>>,
     ) -> Result<Value<'de>, miette::Error> {
         // TODO: Error Handle
@@ -444,6 +469,7 @@ impl<'de> Interpreter<'de> {
 
                 self.environment
                     .define(Cow::Borrowed("this"), instance.clone())?;
+
                 for (param, arg) in params.iter().zip(args.into_iter()) {
                     self.environment.define(param.clone(), arg)?;
                 }
@@ -675,7 +701,9 @@ impl Display for Value<'_> {
             Value::Return(value) => write!(f, "return {value}"),
             Value::Class { .. } => write!(f, "<class>"),
             Value::Instance { .. } => write!(f, "<instance>"),
-            Value::Method { fun, this } => write!(f, "<method {:?} bound to {:?}>", fun, this),
+            Value::Method { fun, this, .. } => {
+                write!(f, "<method {:?} bound to {:?}>", fun, this)
+            }
         }
     }
 }
