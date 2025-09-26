@@ -13,10 +13,17 @@ class father < grand_father {
    }
 }
 
-class grand_father {
+class grand_father < grand_grand_father {
     init(a) {
         print this.a + 100;
         this.a = 100;
+        super(a);
+    }
+}
+
+class grand_grand_father {
+    init(a) {
+        print "done";
     }
 }
 

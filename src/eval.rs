@@ -444,7 +444,7 @@ impl<'de> Interpreter<'de> {
 
                                     Some(Value::Method {
                                         fun: init.clone(),
-                                        this: None,
+                                        this: Some(Box::new(Value::Class(father.clone()))),
                                         father: None,
                                     })
                                 }
@@ -463,12 +463,42 @@ impl<'de> Interpreter<'de> {
                             )?
                         }
                     }
-                    Value::Method { fun, this, father } => self.eval_method_call(
-                        Value::Fun(fun),
-                        this.map(|this| *this),
-                        father.map(|father| *father),
-                        argument_values,
-                    )?,
+                    Value::Method {
+                        fun,
+                        mut this,
+                        mut father,
+                    } => {
+                        if let Some(class) = this.as_ref()
+                            && let Value::Class(class) = class.as_ref()
+                        {
+                            father = match class.father.as_ref() {
+                                Some(father) => {
+                                    let Some(Value::Class(father)) = self.environment.get(father)
+                                    else {
+                                        return Err(miette!("no father class"));
+                                    };
+
+                                    let Some(Value::Fun(init)) = father.methods.get("init") else {
+                                        return Err(miette!("father init is not a function"));
+                                    };
+
+                                    Some(Box::new(Value::Method {
+                                        fun: init.clone(),
+                                        this: Some(Box::new(Value::Class(father.clone()))),
+                                        father: None,
+                                    }))
+                                }
+                                None => None,
+                            };
+                            this = None;
+                        }
+                        self.eval_method_call(
+                            Value::Fun(fun),
+                            this.map(|this| *this),
+                            father.map(|father| *father),
+                            argument_values,
+                        )?
+                    }
                     // TODO: error handle
                     Value::Nil => {
                         return Err(miette!("Cannot call a nil value"));
