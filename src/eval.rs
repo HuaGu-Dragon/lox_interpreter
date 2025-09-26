@@ -502,6 +502,9 @@ impl<'de> Interpreter<'de> {
 
                 if let Some(father) = father {
                     self.environment.define(Cow::Borrowed("super"), father)?;
+                } else {
+                    self.environment
+                        .define(Cow::Borrowed("super"), Value::Nil)?;
                 }
 
                 for (param, arg) in params.iter().zip(args.into_iter()) {
