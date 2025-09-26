@@ -470,6 +470,9 @@ impl<'de> Interpreter<'de> {
                         argument_values,
                     )?,
                     // TODO: error handle
+                    Value::Nil => {
+                        return Err(miette!("Cannot call a nil value"));
+                    }
                     _ => panic!(""),
                 }
             }
