@@ -5,11 +5,19 @@ class child < father {
     }
 }
 
-class father {
+class father < grand_father {
    init(a) {
         this.a = this.a + this.a;
-        print a;
+        print this.a;
+        super(a);
    }
+}
+
+class grand_father {
+    init(a) {
+        print this.a + 100;
+        this.a = 100;
+    }
 }
 
 var instance = child(123);

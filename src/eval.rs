@@ -15,7 +15,7 @@ pub enum Value<'de> {
     Fun(Rc<Function<'de>>),
     Method {
         fun: Rc<Function<'de>>,
-        this: Box<Value<'de>>,
+        this: Option<Box<Value<'de>>>,
         father: Option<Box<Value<'de>>>,
     },
     Class(Rc<Class<'de>>),
@@ -268,7 +268,7 @@ impl<'de> Interpreter<'de> {
                         if let Value::Fun(fun) = method {
                             Value::Method {
                                 fun: fun.clone(),
-                                this: Box::new(lhs),
+                                this: Some(Box::new(lhs)),
                                 father,
                             }
                         } else {
@@ -278,7 +278,7 @@ impl<'de> Interpreter<'de> {
                         if let Value::Fun(fun) = value {
                             Value::Method {
                                 fun: fun.clone(),
-                                this: Box::new(lhs),
+                                this: Some(Box::new(lhs)),
                                 father: None,
                             }
                         } else {
@@ -438,7 +438,15 @@ impl<'de> Interpreter<'de> {
                                         return Err(miette!("no father class"));
                                     };
 
-                                    father.methods.get("init").cloned()
+                                    let Some(Value::Fun(init)) = father.methods.get("init") else {
+                                        return Err(miette!("father init is not a function"));
+                                    };
+
+                                    Some(Value::Method {
+                                        fun: init.clone(),
+                                        this: None,
+                                        father: None,
+                                    })
                                 }
                                 None => None,
                             };
@@ -449,7 +457,7 @@ impl<'de> Interpreter<'de> {
                                     .get("init")
                                     .ok_or(miette!("don't have init method"))?
                                     .clone(),
-                                instance,
+                                Some(instance),
                                 father,
                                 argument_values,
                             )?
@@ -457,7 +465,7 @@ impl<'de> Interpreter<'de> {
                     }
                     Value::Method { fun, this, father } => self.eval_method_call(
                         Value::Fun(fun),
-                        *this,
+                        this.map(|this| *this),
                         father.map(|father| *father),
                         argument_values,
                     )?,
@@ -471,7 +479,7 @@ impl<'de> Interpreter<'de> {
     fn eval_method_call(
         &mut self,
         method: Value<'de>,
-        instance: Value<'de>,
+        instance: Option<Value<'de>>,
         father: Option<Value<'de>>, // should be a function instead of class
         args: Vec<Value<'de>>,
     ) -> Result<Value<'de>, miette::Error> {
@@ -484,8 +492,13 @@ impl<'de> Interpreter<'de> {
                 }
                 self.environment.stack.push();
 
-                self.environment
-                    .define(Cow::Borrowed("this"), instance.clone())?;
+                let instance = if let Some(instance) = instance {
+                    self.environment
+                        .define(Cow::Borrowed("this"), instance.clone())?;
+                    Some(instance)
+                } else {
+                    None
+                };
 
                 if let Some(father) = father {
                     self.environment.define(Cow::Borrowed("super"), father)?;
@@ -498,8 +511,13 @@ impl<'de> Interpreter<'de> {
 
                 self.environment.stack.pop();
 
+                // TODO: handle init with return value, too ugly now
                 if name.eq("init") {
-                    Ok(instance)
+                    if let Some(instance) = instance {
+                        Ok(instance)
+                    } else {
+                        Ok(Value::Nil)
+                    }
                 } else if let Terminate::Return(value) = ret {
                     Ok(value)
                 } else {
