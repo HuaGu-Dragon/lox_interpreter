@@ -669,13 +669,13 @@ impl<'de> Interpreter<'de> {
             StatementTree::Class { name, father, body } => {
                 // TODO: Handle error
                 let Atom::Ident(name, _) = name else {
-                    panic!("")
+                    return Err(miette!("Expected a ident"));
                 };
 
                 let father = if let Some(father) = father {
                     // TODO: Handle error
                     let Atom::Ident(name, _) = father else {
-                        panic!("")
+                        return Err(miette!("Expected a ident"));
                     };
                     Some(Cow::Borrowed(*name))
                 } else {
@@ -683,7 +683,7 @@ impl<'de> Interpreter<'de> {
                 };
 
                 let StatementTree::Block(body) = body.as_ref() else {
-                    panic!()
+                    return Err(miette!("Expected a block"));
                 };
 
                 let mut methods = HashMap::new();

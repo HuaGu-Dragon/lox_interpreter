@@ -241,7 +241,6 @@ impl<'de> Parser<'de> {
 
         self.lexer.expect(TokenKind::RightBrace, "Expected '}'")?;
 
-        // TODO: Implement class inheritance
         Ok(StatementTree::Class {
             name: ident,
             father,
@@ -910,7 +909,6 @@ impl Display for StatementTree<'_> {
                 body,
             } => write!(f, "(for {init} {condition} {increment} {body})"),
             StatementTree::While { condition, body } => write!(f, "(while {condition} {body})"),
-            // TODO: support inheritance
             StatementTree::Class { name, father, .. } => {
                 if let Some(father) = father {
                     write!(f, "(class {name} < {father} )")
