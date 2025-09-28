@@ -1,2 +1,7 @@
 var in = input();
 print "you input: " + in;
+
+var max_value = max(1, 2, -1, 200, 300);
+print max_value;
+var max_value = max(1, 2, -1, 210);
+print max_value;

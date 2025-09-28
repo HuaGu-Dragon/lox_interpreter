@@ -39,7 +39,7 @@ pub struct Class<'de> {
 pub enum Function<'de> {
     Native {
         name: Cow<'de, str>,
-        params: Vec<Cow<'de, str>>,
+        params: Option<Vec<Cow<'de, str>>>,
         body: fn(&[Value<'de>]) -> Result<Value<'de>, miette::Error>,
     },
     UserDefined {
@@ -100,8 +100,16 @@ impl<'de> Stack<'de> {
             Cow::Borrowed("input"),
             Value::Fun(Rc::new(Function::Native {
                 name: Cow::Borrowed("input"),
-                params: vec![],
+                params: None,
                 body: input,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("max"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("max"),
+                params: None,
+                body: crate::system::max,
             })),
         );
         Self {
@@ -412,7 +420,9 @@ impl<'de> Interpreter<'de> {
                 match callee_value {
                     Value::Fun(fun) => match fun.as_ref() {
                         Function::Native { params, body, .. } => {
-                            if params.len() != argument_values.len() {
+                            if let Some(params) = params
+                                && params.len() != argument_values.len()
+                            {
                                 return Err(miette::miette!("Argument count mismatch"));
                             }
 
