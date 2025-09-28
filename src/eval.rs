@@ -5,6 +5,7 @@ use miette::{LabeledSpan, miette};
 use crate::{
     Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
+    system::input,
 };
 
 #[derive(Debug, Clone)]
@@ -93,6 +94,20 @@ pub struct Stack<'de> {
 }
 
 impl<'de> Stack<'de> {
+    pub fn init() -> Self {
+        let mut system = HashMap::new();
+        system.insert(
+            Cow::Borrowed("input"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("input"),
+                params: vec![],
+                body: input,
+            })),
+        );
+        Self {
+            values: vec![system],
+        }
+    }
     pub fn push(&mut self) {
         self.values.push(HashMap::new());
     }
@@ -136,9 +151,7 @@ impl<'de> Interpreter<'de> {
             parser: Parser::new(filename, whole),
             // TODO: handle this ugly code
             environment: Environment {
-                stack: Stack {
-                    values: vec![HashMap::new()],
-                },
+                stack: Stack::init(),
             },
         }
     }
@@ -398,7 +411,13 @@ impl<'de> Interpreter<'de> {
                     .collect::<Result<Vec<_>, _>>()?;
                 match callee_value {
                     Value::Fun(fun) => match fun.as_ref() {
-                        Function::Native { .. } => todo!(),
+                        Function::Native { params, body, .. } => {
+                            if params.len() != argument_values.len() {
+                                return Err(miette::miette!("Argument count mismatch"));
+                            }
+
+                            body(&argument_values)?
+                        }
                         Function::UserDefined { params, body, .. } => {
                             if params.len() != argument_values.len() {
                                 return Err(miette::miette!("Argument count mismatch"));

@@ -6,6 +6,7 @@ fun fibonacci(n) {
     }
 }
 
-for (var i = 1; i <= 10; i = i + 1) {
-    print fibonacci(i);
-}
+// for (var i = 1; i <= 10; i = i + 1) {
+//    print fibonacci(i);
+//}
+print fibonacci(16);

@@ -1,0 +1,2 @@
+var in = input();
+print "you input: " + in;
