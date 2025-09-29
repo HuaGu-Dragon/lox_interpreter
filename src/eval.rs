@@ -94,13 +94,14 @@ pub struct Stack<'de> {
 }
 
 impl<'de> Stack<'de> {
+    // TODO: use i32 to simplify the params
     pub fn init() -> Self {
         let mut system = HashMap::new();
         system.insert(
             Cow::Borrowed("input"),
             Value::Fun(Rc::new(Function::Native {
                 name: Cow::Borrowed("input"),
-                params: None,
+                params: Some(vec![Cow::Borrowed("input")]),
                 body: input,
             })),
         );
