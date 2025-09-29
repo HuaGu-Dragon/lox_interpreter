@@ -42,3 +42,21 @@ pub fn max<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
         None => Err(miette!("max requires at least one argument")),
     }
 }
+
+// TODO: Error message
+pub fn number<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+    let mut input = input.iter();
+    match input.next() {
+        Some(Value::Str(value)) => Ok(Value::Number(value.parse().map_err(|e| miette!("{e}"))?)),
+        _ => Err(miette!("")),
+    }
+}
+
+// TODO: Error message
+pub fn to_string<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+    let mut input = input.iter();
+    match input.next() {
+        Some(Value::Number(n)) => Ok(Value::Str(Cow::Owned(n.to_string()))),
+        _ => Err(miette!("")),
+    }
+}
