@@ -1,0 +1,3 @@
+var i = input("input a number: ");
+
+print "your number plus 20 is: " + str(number(i) + 20);

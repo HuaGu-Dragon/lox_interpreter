@@ -5,7 +5,7 @@ use miette::{LabeledSpan, miette};
 use crate::{
     Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
-    system::input,
+    system::{input, number, to_string},
 };
 
 #[derive(Debug, Clone)]
@@ -110,6 +110,23 @@ impl<'de> Stack<'de> {
                 name: Cow::Borrowed("max"),
                 params: None,
                 body: crate::system::max,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("str"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("str"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: to_string,
+            })),
+        );
+
+        system.insert(
+            Cow::Borrowed("number"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("number"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: number,
             })),
         );
         Self {
