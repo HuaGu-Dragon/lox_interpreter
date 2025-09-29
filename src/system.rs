@@ -1,16 +1,25 @@
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    io::{Write, stdout},
+};
 
 use miette::{Error, miette};
 
 use crate::eval::Value;
 
-pub fn input<'de>(_input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn input<'de>(message: &[Value<'de>]) -> Result<Value<'de>, Error> {
+    let message = message.iter().next();
+    let Some(Value::Str(str)) = message else {
+        return Err(miette!("expected a string"));
+    };
+    write!(stdout(), "{str}").map_err(|e| miette!("{e}"))?;
+    stdout().flush().map_err(|e| miette!("{e}"))?;
     let mut input = String::new();
     std::io::stdin()
         .read_line(&mut input)
         .map_err(|e| miette!("{e}"))?;
 
-    Ok(Value::Str(Cow::Owned(input)))
+    Ok(Value::Str(Cow::Owned(input.trim().to_string())))
 }
 
 pub fn max<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {

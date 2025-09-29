@@ -1,4 +1,4 @@
-var in = input();
+var in = input("input: ");
 print "you input: " + in;
 
 var max_value = max(1, 2, -1, 200, 300);
