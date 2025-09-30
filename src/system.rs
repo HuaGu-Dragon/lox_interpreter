@@ -48,7 +48,7 @@ pub fn number<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Str(value)) => Ok(Value::Number(value.parse().map_err(|e| miette!("{e}"))?)),
-        _ => Err(miette!("")),
+        _ => Err(miette!("Not a string")),
     }
 }
 
@@ -57,6 +57,6 @@ pub fn to_string<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Str(Cow::Owned(n.to_string()))),
-        _ => Err(miette!("")),
+        _ => Err(miette!("Not a number")),
     }
 }

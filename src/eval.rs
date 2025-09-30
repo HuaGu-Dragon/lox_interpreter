@@ -550,7 +550,7 @@ impl<'de> Interpreter<'de> {
                     Value::Nil => {
                         return Err(miette!("Cannot call a nil value"));
                     }
-                    _ => panic!(""),
+                    _ => return Err(miette!("Callee is not a function or class")),
                 }
             }
         })
