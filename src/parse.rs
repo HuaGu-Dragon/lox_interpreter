@@ -442,7 +442,6 @@ impl<'de> Parser<'de> {
                             ..
                         }))
                     ) {
-                        self.lexer.next(); // Consume the semicolon
                         return Ok(StatementTree::Expression(TokenTree::Cons(
                             Op::Var,
                             vec![ident, TokenTree::Atom(Atom::Nil)],
