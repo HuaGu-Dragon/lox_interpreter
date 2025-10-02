@@ -241,12 +241,10 @@ impl<'de> Interpreter<'de> {
                 }
             },
             TokenTree::Cons(Op::Var, token_trees) => {
-                // TODO: Handle nil declaration
                 assert!(token_trees.len() == 2);
                 let mut trees = token_trees.iter();
                 let Some(TokenTree::Atom(Atom::Ident(name, _))) = trees.next() else {
-                    // TODO: beautiful Handle
-                    panic!("")
+                    return Err(miette!("Left side is not an identifier"));
                 };
                 let value = self.eval_expression(trees.next().unwrap())?;
 
@@ -275,17 +273,15 @@ impl<'de> Interpreter<'de> {
                 let mut trees = token_trees.iter();
                 let lhs = self.eval_expression(trees.next().unwrap())?;
                 let Value::Instance { class, fields } = lhs.clone() else {
-                    // TODO: error handle
-                    panic!("");
+                    return Err(miette!("Left side is not an instance"));
                 };
                 let TokenTree::Atom(Atom::Ident(name, _)) = trees.next().unwrap() else {
-                    // TODO: Error handle
-                    panic!("");
+                    return Err(miette!("Field name must be identifier"));
                 };
 
                 if let Some(instance) = self.environment.get(class.as_ref()) {
                     let Value::Class(class) = instance else {
-                        panic!("");
+                        return Err(miette!("Left side is not a class"));
                     };
 
                     let father = match class.father.as_ref() {
