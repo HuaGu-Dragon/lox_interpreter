@@ -435,7 +435,19 @@ impl<'de> Parser<'de> {
 
                     let ident = TokenTree::Atom(Atom::Ident(token.literal, self.lexer.byte));
 
-                    // TODO: Handle nil Var declaration
+                    if matches!(
+                        self.lexer.peek(),
+                        Some(Ok(Token {
+                            kind: TokenKind::Semicolon,
+                            ..
+                        }))
+                    ) {
+                        self.lexer.next(); // Consume the semicolon
+                        return Ok(StatementTree::Expression(TokenTree::Cons(
+                            Op::Var,
+                            vec![ident, TokenTree::Atom(Atom::Nil)],
+                        )));
+                    }
 
                     self.lexer
                         .expect(TokenKind::Equal, "Expected '=' after variable name")
