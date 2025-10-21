@@ -5,7 +5,7 @@ use miette::{LabeledSpan, miette};
 use crate::{
     Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
-    system::{cos, exp, input, merge_const, number, sin, tan, to_string, write_expr},
+    system::{cos, exp, input, log, merge_const, number, sin, sqrt, tan, to_string, write_expr},
 };
 
 #[derive(Debug, Clone)]
@@ -176,6 +176,22 @@ impl<'de> Stack<'de> {
                 name: Cow::Borrowed("exp"),
                 params: Some(vec![Cow::Borrowed("input")]),
                 body: exp,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("log"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("log"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: log,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("sqrt"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("sqrt"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: sqrt,
             })),
         );
         Self {

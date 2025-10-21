@@ -266,3 +266,21 @@ pub fn exp<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
         _ => Err(miette!("Not a number")),
     }
 }
+
+// TODO: Error Message
+pub fn log<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+    let mut input = input.iter();
+    match input.next() {
+        Some(Value::Number(n)) => Ok(Value::Number(n.log10())),
+        _ => Err(miette!("Not a number")),
+    }
+}
+
+// TODO: Error Message
+pub fn sqrt<'de>(input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+    let mut input = input.iter();
+    match input.next() {
+        Some(Value::Number(n)) => Ok(Value::Number(n.sqrt())),
+        _ => Err(miette!("Not a number")),
+    }
+}
