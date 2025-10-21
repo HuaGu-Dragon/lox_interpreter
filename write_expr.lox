@@ -1,0 +1,21 @@
+
+// Assign(E):
+var a = 10;
+var b = 20;
+
+// ReadExpr(E):
+a;
+b;
+
+// Value(E):
+print a;
+print b;
+
+// WriteExpr(E):
+write_expr("a");
+write_expr("b");
+
+// CompoundExpr(E):
+a + b;
+write_expr("a + b");
+print a + b;

@@ -5,7 +5,7 @@ use miette::{LabeledSpan, miette};
 use crate::{
     Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
-    system::{input, number, to_string},
+    system::{cos, exp, input, merge_const, number, sin, tan, to_string, write_expr},
 };
 
 #[derive(Debug, Clone)]
@@ -128,6 +128,54 @@ impl<'de> Stack<'de> {
                 name: Cow::Borrowed("number"),
                 params: Some(vec![Cow::Borrowed("input")]),
                 body: number,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("write_expr"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("write_expr"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: write_expr,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("merge_const"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("merge_const"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: merge_const,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("sin"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("sin"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: sin,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("cos"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("cos"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: cos,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("tan"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("tan"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: tan,
+            })),
+        );
+        system.insert(
+            Cow::Borrowed("exp"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("exp"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: exp,
             })),
         );
         Self {

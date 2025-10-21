@@ -1,0 +1,7 @@
+// Merge const
+
+merge_const("1 + 2 + 3 + 4 / 2");
+
+merge_const("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!false");
+
+merge_const("(2+3-a)*(b+3*4)");
