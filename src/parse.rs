@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use miette::{Context, Error, LabeledSpan};
 
@@ -877,6 +877,48 @@ impl Display for TokenTree<'_> {
                 write!(f, "({callee}")?;
                 for arg in arguments {
                     write!(f, " {arg}")?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+pub struct DisplayMiddle<'a>(pub &'a TokenTree<'a>);
+
+impl<'a> DisplayMiddle<'a> {
+    pub fn new(tree: &'a TokenTree<'a>) -> Self {
+        Self(tree)
+    }
+}
+
+impl<'a> std::fmt::Display for DisplayMiddle<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            TokenTree::Atom(atom) => write!(f, "{atom}"),
+            TokenTree::Cons(op, token_trees) => {
+                let mut iter = token_trees.iter().map(DisplayMiddle);
+                let left = iter.next().unwrap();
+                let right = iter.next().unwrap();
+                match (&left, op, &right) {
+                    (DisplayMiddle(TokenTree::Atom(Atom::Number(-1.))), Op::Star, token) => {
+                        write!(f, "-{token}")
+                    }
+                    (token, Op::Star, DisplayMiddle(TokenTree::Atom(Atom::Number(-1.)))) => {
+                        write!(f, "-{token}")
+                    }
+                    _ => write!(f, "({left} {op} {right})"),
+                }
+            }
+            TokenTree::Call { callee, arguments } => {
+                write!(f, "{}(", DisplayMiddle(callee))?;
+                let mut first = true;
+                for arg in arguments {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", DisplayMiddle(arg))?;
+                    first = false;
                 }
                 write!(f, ")")
             }

@@ -1,0 +1,21 @@
+// Diff(E, V)
+
+diff("1 + 2 + a + a", "a");  // 2
+diff("1 / a", "a");  // -1/a^2
+
+diff("x * x", "x");  // 2x
+diff("3 * x", "x");  // 3
+
+diff("sin(x)", "x");  // cos(x)
+diff("cos(x)", "x");  // -sin(x)
+
+diff("exp(x)", "x");  // exp(x)
+diff("log(x)", "x");  // 1/x
+
+diff("sin(x * x)", "x");  // cos(x*x) * 2x
+diff("x * sin(x)", "x");  // sin(x) + x*cos(x)
+
+diff("sin(x) + cos(x)", "x");  // cos(x) - sin(x)
+
+diff("x * y", "x");  // y
+diff("x * y", "y");  // x

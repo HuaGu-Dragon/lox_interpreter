@@ -1,7 +1,7 @@
 
 // Assign(E):
 var a = 10;
-var b = 20;
+assign("b", 20);
 
 // ReadExpr(E):
 a;
@@ -18,4 +18,5 @@ write_expr("b");
 // CompoundExpr(E):
 a + b;
 write_expr("a + b");
+write_expr("a + b * c / (3 - 1)");
 print a + b;

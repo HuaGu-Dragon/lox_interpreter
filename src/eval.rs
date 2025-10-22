@@ -1,11 +1,14 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, io::Write, rc::Rc};
 
-use miette::{LabeledSpan, miette};
+use miette::{IntoDiagnostic, LabeledSpan, miette};
 
 use crate::{
     Parser,
     parse::{Atom, Op, StatementTree, TokenTree},
-    system::{cos, exp, input, log, merge_const, number, sin, sqrt, tan, to_string, write_expr},
+    system::{
+        assign, cos, diff, exp, input, log, merge_const, number, sin, sqrt, tan, to_string, value,
+        write_expr,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -40,7 +43,7 @@ pub enum Function<'de> {
     Native {
         name: Cow<'de, str>,
         params: Option<Vec<Cow<'de, str>>>,
-        body: fn(&[Value<'de>]) -> Result<Value<'de>, miette::Error>,
+        body: fn(&mut Environment<'de>, &[Value<'de>]) -> Result<Value<'de>, miette::Error>,
     },
     UserDefined {
         name: Cow<'de, str>,
@@ -52,6 +55,7 @@ pub enum Function<'de> {
 pub struct Interpreter<'de> {
     parser: Parser<'de>,
     environment: Environment<'de>,
+    debug: bool,
 }
 
 #[derive(Debug)]
@@ -83,6 +87,18 @@ impl<'de> Environment<'de> {
         self.stack
             .current_mut()
             .ok_or_else(|| miette!("No current stack frame"))?
+            .insert(name, value);
+        Ok(())
+    }
+
+    pub fn global_define(
+        &mut self,
+        name: Cow<'de, str>,
+        value: Value<'de>,
+    ) -> Result<(), miette::Error> {
+        self.stack
+            .global_mut()
+            .ok_or_else(|| miette!("No global frame"))?
             .insert(name, value);
         Ok(())
     }
@@ -131,6 +147,14 @@ impl<'de> Stack<'de> {
             })),
         );
         system.insert(
+            Cow::Borrowed("assign"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("assign"),
+                params: Some(vec![Cow::Borrowed("input"), Cow::Borrowed("value")]),
+                body: assign,
+            })),
+        );
+        system.insert(
             Cow::Borrowed("write_expr"),
             Value::Fun(Rc::new(Function::Native {
                 name: Cow::Borrowed("write_expr"),
@@ -144,6 +168,15 @@ impl<'de> Stack<'de> {
                 name: Cow::Borrowed("merge_const"),
                 params: Some(vec![Cow::Borrowed("input")]),
                 body: merge_const,
+            })),
+        );
+
+        system.insert(
+            Cow::Borrowed("value"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("value"),
+                params: Some(vec![Cow::Borrowed("input")]),
+                body: value,
             })),
         );
         system.insert(
@@ -194,6 +227,14 @@ impl<'de> Stack<'de> {
                 body: sqrt,
             })),
         );
+        system.insert(
+            Cow::Borrowed("diff"),
+            Value::Fun(Rc::new(Function::Native {
+                name: Cow::Borrowed("diff"),
+                params: Some(vec![Cow::Borrowed("input"), Cow::Borrowed("variable")]),
+                body: diff,
+            })),
+        );
         Self {
             values: vec![system],
         }
@@ -206,11 +247,11 @@ impl<'de> Stack<'de> {
         self.values.pop();
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &HashMap<Cow<'de, str>, Value<'de>>> {
+    fn iter(&self) -> impl Iterator<Item = &HashMap<Cow<'de, str>, Value<'de>>> {
         self.values.iter().rev()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HashMap<Cow<'de, str>, Value<'de>>> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut HashMap<Cow<'de, str>, Value<'de>>> {
         self.values.iter_mut().rev()
     }
 
@@ -220,6 +261,10 @@ impl<'de> Stack<'de> {
 
     pub fn current_mut(&mut self) -> Option<&mut HashMap<Cow<'de, str>, Value<'de>>> {
         self.iter_mut().next()
+    }
+
+    pub fn global_mut(&mut self) -> Option<&mut HashMap<Cow<'de, str>, Value<'de>>> {
+        self.values.iter_mut().next()
     }
 }
 
@@ -243,9 +288,20 @@ impl<'de> Interpreter<'de> {
             environment: Environment {
                 stack: Stack::init(),
             },
+            debug: false,
         }
     }
 
+    pub fn debug(filename: Option<&'de str>, whole: &'de str) -> Self {
+        Self {
+            parser: Parser::new(filename, whole),
+            // TODO: handle this ugly code
+            environment: Environment {
+                stack: Stack::init(),
+            },
+            debug: true,
+        }
+    }
     pub fn eval_expr(&mut self) -> Result<Value<'de>, miette::Error> {
         let expr = self.parser.parse_expression_within(0)?;
         self.eval_expression(&expr)
@@ -268,26 +324,36 @@ impl<'de> Interpreter<'de> {
                 Atom::Nil => Value::Nil,
                 Atom::Boolean(value) => Value::Bool(*value),
                 Atom::Ident(name, byte) => {
-                    let Some(value) = self.environment.get(name) else {
-                        let message = if let Some(key) = self
-                            .environment
-                            .stack
-                            .current()
-                            .and_then(|map| map.keys().next())
-                        {
-                            format!("change variable `{name}` to variable `{key}` ?")
-                        } else {
-                            format!("define the variable `{name}` first ?")
+                    if !self.debug {
+                        let Some(value) = self.environment.get(name) else {
+                            let message = if let Some(key) = self
+                                .environment
+                                .stack
+                                .current()
+                                .and_then(|map| map.keys().next())
+                            {
+                                format!("change variable `{name}` to variable `{key}` ?")
+                            } else {
+                                format!("define the variable `{name}` first ?")
+                            };
+                            return Err(miette!(
+                                help = message,
+                                labels = vec![LabeledSpan::at(byte - name.len()..*byte, "here",)],
+                                "unexpected variable name"
+                            )
+                            .with_source_code(self.parser.whole.to_string()));
                         };
-                        return Err(miette!(
-                            help = message,
-                            labels = vec![LabeledSpan::at(byte - name.len()..*byte, "here",)],
-                            "unexpected variable name"
-                        )
-                        .with_source_code(self.parser.whole.to_string()));
-                    };
-                    // TODO: is a way to remove clone?
-                    value.clone()
+                        // TODO: is a way to remove clone?
+                        value.clone()
+                    } else {
+                        // TODO: ERROR Handling
+                        let mut input = String::new();
+                        print!("input the value of {name}: ");
+                        std::io::stdout().flush().into_diagnostic()?;
+                        std::io::stdin().read_line(&mut input).into_diagnostic()?;
+                        let number = input.trim().parse().into_diagnostic()?;
+                        Value::Number(number)
+                    }
                 }
                 Atom::Super => {
                     if let Some(value) = self.environment.get("super") {
@@ -504,7 +570,7 @@ impl<'de> Interpreter<'de> {
                                 return Err(miette::miette!("Argument count mismatch"));
                             }
 
-                            body(&argument_values)?
+                            body(&mut self.environment, &argument_values)?
                         }
                         Function::UserDefined { params, body, .. } => {
                             if params.len() != argument_values.len() {
