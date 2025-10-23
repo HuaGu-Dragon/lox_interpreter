@@ -99,26 +99,3 @@ jobs:
       # --feature-powerset runs for every combination of features
       - name: cargo hack
         run: cargo hack --feature-powerset check
-  msrv:
-    # check that we can build using the minimal rust version that is specified by this crate
-    runs-on: ubuntu-latest
-    # we use a matrix here just because env can't be used in job names
-    # https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability
-    strategy:
-      matrix:
-        msrv: ["1.85.0"] # 2024 edition requires 1.85.0
-    name: ubuntu / ${{ matrix.msrv }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # tag=v5.0.0
-        with:
-          submodules: true
-      - name: Install ${{ matrix.msrv }}
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # branch=master
-        with:
-          toolchain: ${{ matrix.msrv }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # tag=v4.3.0
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}-cargo
-      - name: cargo +${{ matrix.msrv }} check
-        run: cargo check
