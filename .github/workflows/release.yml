@@ -2,7 +2,6 @@ name: Release
 
 on:
   push:
-    branches: [main]
     tags:
       - v[0-9]+.*
 
@@ -36,7 +35,7 @@ jobs:
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           # (required) Binary name (non-extension portion of filename) to build and upload.
-          bin: binary_name
+          bin: lox_interpreter
           target: ${{ matrix.target }}
         env:
           # (required) GitHub token for uploading assets to GitHub Releases.
