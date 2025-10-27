@@ -31,6 +31,15 @@ pub enum Value<'de> {
     Nil,
 }
 
+impl<'de> Value<'de> {
+    pub fn as_str(&self) -> Result<&str, miette::Error> {
+        match self {
+            Value::Str(cow) => Ok(cow.as_ref()),
+            _ => Err(miette!("Not a string")),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Class<'de> {
     name: Cow<'de, str>,
@@ -43,7 +52,7 @@ pub enum Function<'de> {
     Native {
         name: Cow<'de, str>,
         params: Option<Vec<Cow<'de, str>>>,
-        body: fn(&mut Environment<'de>, &[Value<'de>]) -> Result<Value<'de>, miette::Error>,
+        body: fn(&mut Interpreter<'de>, &[Value<'de>]) -> Result<Value<'de>, miette::Error>,
     },
     UserDefined {
         name: Cow<'de, str>,
@@ -53,8 +62,8 @@ pub enum Function<'de> {
 }
 
 pub struct Interpreter<'de> {
-    parser: Parser<'de>,
-    environment: Environment<'de>,
+    pub parser: Parser<'de>,
+    pub environment: Environment<'de>,
     debug: bool,
 }
 
@@ -302,6 +311,11 @@ impl<'de> Interpreter<'de> {
             debug: true,
         }
     }
+
+    pub fn eval_expr_with(&mut self, expr: &TokenTree<'de>) -> Result<Value<'de>, miette::Error> {
+        self.eval_expression(expr)
+    }
+
     pub fn eval_expr(&mut self) -> Result<Value<'de>, miette::Error> {
         let expr = self.parser.parse_expression_within(0)?;
         self.eval_expression(&expr)
@@ -570,7 +584,7 @@ impl<'de> Interpreter<'de> {
                                 return Err(miette::miette!("Argument count mismatch"));
                             }
 
-                            body(&mut self.environment, &argument_values)?
+                            body(self, &argument_values)?
                         }
                         Function::UserDefined { params, body, .. } => {
                             if params.len() != argument_values.len() {

@@ -6,11 +6,11 @@ use std::{
 use miette::{Error, miette};
 
 use crate::{
-    eval::{Environment, Value},
+    eval::{Interpreter, Value},
     parse::{Atom, DisplayMiddle, TokenTree},
 };
 
-pub fn input<'de>(_: &mut Environment, message: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn input<'de>(_: &mut Interpreter<'de>, message: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let message = message.iter().next();
     let Some(Value::Str(str)) = message else {
         return Err(miette!("expected a string"));
@@ -25,7 +25,7 @@ pub fn input<'de>(_: &mut Environment, message: &[Value<'de>]) -> Result<Value<'
     Ok(Value::Str(Cow::Owned(input.trim().to_string())))
 }
 
-pub fn max<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn max<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut max = None;
 
     for value in input {
@@ -47,7 +47,7 @@ pub fn max<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
 }
 
 // TODO: Error message
-pub fn number<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn number<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Str(value)) => Ok(Value::Number(value.parse().map_err(|e| miette!("{e}"))?)),
@@ -56,7 +56,7 @@ pub fn number<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'d
 }
 
 // TODO: Error message
-pub fn to_string<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn to_string<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Str(Cow::Owned(n.to_string()))),
@@ -65,11 +65,14 @@ pub fn to_string<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value
 }
 
 // TODO: Error message
-pub fn write_expr<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn write_expr<'de>(
+    _: &mut Interpreter<'de>,
+    input: &[Value<'de>],
+) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Str(expr)) => {
-            let parser = crate::Parser::new(None, expr);
+            let parser = crate::Parser::new(None, expr.as_ref());
             let expr = match parser.parse_expr() {
                 Ok(expr) => expr,
                 Err(e) => {
@@ -88,7 +91,7 @@ pub fn write_expr<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Valu
     }
 }
 
-pub fn value<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn value<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     let mut interpreter = match input.next() {
         Some(Value::Str(expr)) => crate::eval::Interpreter::debug(None, expr),
@@ -114,11 +117,14 @@ pub fn value<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de
 }
 
 // TODO: Error Message
-pub fn merge_const<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn merge_const<'de>(
+    _: &mut Interpreter<'de>,
+    input: &[Value<'de>],
+) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Str(expr)) => {
-            let parser = crate::Parser::new(None, expr);
+            let parser = crate::Parser::new(None, expr.as_ref());
             let expr = match parser.parse_expr() {
                 Ok(expr) => expr,
                 Err(e) => {
@@ -131,7 +137,7 @@ pub fn merge_const<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Val
             };
 
             let expr = merge_expr(&expr);
-            println!("{expr}");
+            println!("{}", DisplayMiddle(&expr));
             Ok(Value::Nil)
         }
         _ => Err(miette!("Not a expr")),
@@ -139,7 +145,7 @@ pub fn merge_const<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Val
 }
 
 // TODO: Error Message
-pub fn sin<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn sin<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.sin())),
@@ -147,7 +153,7 @@ pub fn sin<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
     }
 }
 // TODO: Error Message
-pub fn cos<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn cos<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.cos())),
@@ -155,7 +161,7 @@ pub fn cos<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
     }
 }
 // TODO: Error Message
-pub fn tan<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn tan<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.tan())),
@@ -163,7 +169,7 @@ pub fn tan<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
     }
 }
 
-pub fn exp<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn exp<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.exp())),
@@ -172,7 +178,7 @@ pub fn exp<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
 }
 
 // TODO: Error Message
-pub fn log<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn log<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.log10())),
@@ -181,7 +187,7 @@ pub fn log<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>,
 }
 
 // TODO: Error Message
-pub fn sqrt<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn sqrt<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     match input.next() {
         Some(Value::Number(n)) => Ok(Value::Number(n.sqrt())),
@@ -189,7 +195,10 @@ pub fn sqrt<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>
     }
 }
 
-pub fn assign<'de>(e: &mut Environment<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn assign<'de>(
+    system: &mut Interpreter<'de>,
+    input: &[Value<'de>],
+) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     let Some(Value::Str(ident)) = input.next() else {
         return Err(miette!("not a string"));
@@ -201,12 +210,14 @@ pub fn assign<'de>(e: &mut Environment<'de>, input: &[Value<'de>]) -> Result<Val
 
     let value = value.clone();
 
-    e.global_define(ident.clone(), value.clone())?;
+    system
+        .environment
+        .global_define(ident.clone(), value.clone())?;
 
     Ok(value)
 }
 
-pub fn diff<'de>(_: &mut Environment, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
+pub fn diff<'de>(_: &mut Interpreter<'de>, input: &[Value<'de>]) -> Result<Value<'de>, Error> {
     let mut input = input.iter();
     let expr = match input.next() {
         Some(Value::Str(expr)) => {
