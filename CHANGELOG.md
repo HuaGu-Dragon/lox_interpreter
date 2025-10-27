@@ -1,6 +1,10 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [0.1.4]
+Support the carrot operator.
+
 ## [0.1.3]
 
 - Release package.

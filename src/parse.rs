@@ -71,6 +71,7 @@ pub enum Op {
     Minus,
     Plus,
     Star,
+    Carrot,
     BangEqual,
     EqualEqual,
     GreaterEqual,
@@ -754,6 +755,10 @@ impl<'de> Parser<'de> {
                     ..
                 }) => Op::Star,
                 Some(Token {
+                    kind: TokenKind::Carrot,
+                    ..
+                }) => Op::Carrot,
+                Some(Token {
                     kind:
                         TokenKind::RightParen
                         | TokenKind::RightBrace
@@ -822,6 +827,7 @@ impl Display for Op {
                 Op::Minus => "-",
                 Op::Plus => "+",
                 Op::Star => "*",
+                Op::Carrot => "^",
                 Op::BangEqual => "!=",
                 Op::EqualEqual => "==",
                 Op::GreaterEqual => ">=",
@@ -993,6 +999,7 @@ fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
         | Op::GreaterEqual => (3, 4),
         Op::Plus | Op::Minus => (5, 6),
         Op::Star | Op::Slash => (7, 8),
+        Op::Carrot => (9, 10),
         Op::Field => (10, 13),
         _ => return None,
     };

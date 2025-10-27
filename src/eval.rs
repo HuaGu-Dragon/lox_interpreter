@@ -494,6 +494,10 @@ impl<'de> Interpreter<'de> {
                         [Value::Number(lhs), Value::Number(rhs)] => Value::Number(lhs * rhs),
                         _ => return Err(miette::miette!("Invalid multiplication operation")),
                     },
+                    crate::parse::Op::Carrot => match values.as_slice() {
+                        [Value::Number(lhs), Value::Number(rhs)] => Value::Number(lhs.powf(*rhs)),
+                        _ => return Err(miette::miette!("Invalid exponentiation operation")),
+                    },
                     crate::parse::Op::BangEqual => match values.as_slice() {
                         [Value::Str(lhs), Value::Str(rhs)] => Value::Bool(lhs != rhs),
                         [Value::Bool(lhs), Value::Bool(rhs)] => Value::Bool(lhs != rhs),

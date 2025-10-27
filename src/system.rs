@@ -318,6 +318,7 @@ fn differentiate<'de>(expr: &TokenTree<'de>, variable: &str) -> Result<TokenTree
                 }
                 _ => Err(miette!("Slash operator expects 2 operands")),
             },
+
             _ => Err(miette!(
                 "Unsupported operator for differentiation: {:?}",
                 op
